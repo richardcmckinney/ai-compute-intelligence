@@ -1,0 +1,191 @@
+---
+# Namespace: platform runs inside customer VPC (Section 3).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aci-platform
+  labels:
+    app.kubernetes.io/part-of: aci-platform
+---
+# ConfigMap: non-sensitive platform configuration.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aci-config
+  namespace: aci-platform
+data:
+  ACI_ENVIRONMENT: "production"
+  ACI_INTERCEPTOR_TIMEOUT_MS: "20"
+  ACI_INTERCEPTOR_TOTAL_BUDGET_MS: "50"
+  ACI_CONFIDENCE_CAP: "0.95"
+  ACI_CONFIDENCE_CHARGEBACK_THRESHOLD: "0.80"
+  ACI_CONFIDENCE_PROVISIONAL_THRESHOLD: "0.50"
+  ACI_TRAC_CARBON_PRICE_PER_TCO2E: "50.0"
+  ACI_TRAC_RISK_MULTIPLIER: "0.15"
+  ACI_FBP_EPSILON_TOTAL_QUARTERLY: "4.0"
+---
+# Deployment: main ACI platform service.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aci-platform
+  namespace: aci-platform
+  labels:
+    app: aci-platform
+    component: api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: aci-platform
+      component: api
+  template:
+    metadata:
+      labels:
+        app: aci-platform
+        component: api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: aci-platform
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: aci-platform
+          image: aci-platform:latest
+          ports:
+            - containerPort: 8000
+              name: http
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: aci-config
+            - secretRef:
+                name: aci-secrets
+          resources:
+            requests:
+              cpu: "500m"
+              # Memory budget: 256MB for index + overhead (Section B, Phase 0).
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+# Service: internal cluster access.
+apiVersion: v1
+kind: Service
+metadata:
+  name: aci-platform
+  namespace: aci-platform
+spec:
+  selector:
+    app: aci-platform
+    component: api
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  type: ClusterIP
+---
+# ServiceAccount: minimal RBAC.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aci-platform
+  namespace: aci-platform
+  annotations:
+    # For AWS: IAM role for read-only billing + CloudTrail access.
+    eks.amazonaws.com/role-arn: ""
+---
+# HorizontalPodAutoscaler.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aci-platform
+  namespace: aci-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: aci-platform
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+---
+# NetworkPolicy: restrict egress to known endpoints only.
+# The platform operates within the customer trust boundary (Section 10).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aci-platform-egress
+  namespace: aci-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: aci-platform
+  policyTypes:
+    - Egress
+  egress:
+    # Allow DNS resolution (scoped to kube-dns only).
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # Allow Kafka (event bus).
+    - to:
+        - podSelector:
+            matchLabels:
+              app: kafka
+      ports:
+        - port: 9092
+    # Allow Redis (attribution index).
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - port: 6379
+    # Allow Neo4j (graph store).
+    - to:
+        - podSelector:
+            matchLabels:
+              app: neo4j
+      ports:
+        - port: 7687

@@ -1,0 +1,96 @@
+# docker-compose.yml
+# Local development stack: ACI platform + Kafka + Redis + Neo4j.
+#
+# Usage:
+#   docker compose up -d          # Start all services.
+#   docker compose up aci --build # Rebuild and start the platform only.
+#   docker compose logs -f aci    # Follow platform logs.
+#
+# The platform auto-discovers local services via environment variables.
+
+services:
+  aci:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      ACI_ENVIRONMENT: development
+      ACI_TENANT_ID: dev-local
+      ACI_KAFKA_BOOTSTRAP: kafka:9092
+      ACI_REDIS_URL: redis://redis:6379/0
+      ACI_NEO4J_URI: bolt://neo4j:7687
+      ACI_NEO4J_USER: neo4j
+      ACI_NEO4J_PASSWORD: aci-dev-password
+      ACI_INTERCEPTOR_TIMEOUT_MS: "20"
+      ACI_CONFIDENCE_CAP: "0.95"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health').raise_for_status()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  kafka:
+    image: confluentinc/cp-kafka:7.7.1
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:29093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      CLUSTER_ID: "aci-dev-cluster-001"
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  neo4j:
+    image: neo4j:5.25-community
+    ports:
+      - "7474:7474"   # Browser.
+      - "7687:7687"   # Bolt.
+    environment:
+      NEO4J_AUTH: neo4j/aci-dev-password
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_server_memory_heap_max__size: 512M
+    volumes:
+      - neo4j-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p aci-dev-password 'RETURN 1'"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  neo4j-data:

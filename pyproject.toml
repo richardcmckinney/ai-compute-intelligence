@@ -1,0 +1,69 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aci-platform"
+version = "0.1.0"
+description = "AI Compute Intelligence Platform: application-level cost and carbon attribution for enterprise AI workloads"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.7.0",
+    "aiokafka>=0.12.0",
+    "redis[hiredis]>=5.2.0",
+    "neo4j>=5.27.0",
+    "numpy>=2.1.0",
+    "scipy>=1.14.0",
+    "scikit-learn>=1.6.0",
+    "structlog>=24.4.0",
+    "opentelemetry-api>=1.29.0",
+    "opentelemetry-sdk>=1.29.0",
+    "opentelemetry-instrumentation-fastapi>=0.50b0",
+    "httpx>=0.28.0",
+    "orjson>=3.10.0",
+    "prometheus-client>=0.21.0",
+    "cryptography>=44.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.25.0",
+    "pytest-cov>=6.0.0",
+    "pytest-benchmark>=5.1.0",
+    "hypothesis>=6.119.0",
+    "respx>=0.22.0",
+    "ruff>=0.8.0",
+    "mypy>=1.14.0",
+    "pre-commit>=4.0.0",
+]
+glass-jaw = [
+    "locust>=2.32.0",
+    "psutil>=6.1.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aci"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "glass_jaw: Phase 0 Glass Jaw validation tests",
+    "integration: integration tests requiring external services",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "ANN", "B", "SIM", "TCH"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]

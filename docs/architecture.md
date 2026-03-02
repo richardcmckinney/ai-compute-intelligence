@@ -1,0 +1,101 @@
+# Architecture
+
+## System Overview
+
+The ACI platform implements a six-phase data flow connecting passive enterprise signal
+ingestion to decision-time AI inference intervention. The system operates within the
+customer's VPC; raw telemetry never leaves the customer's trust boundary.
+
+## Two-Tier Graph Architecture
+
+**Tier 1: Authoritative Property Graph (Neo4j)**
+Full property graph with time-versioned edges. Updated asynchronously by the
+reconciliation engine. Never queried on the decision-time critical path.
+Supports point-in-time traversal for historical attribution reconstruction.
+
+**Tier 2: Precomputed Attribution Index (Redis + Local Process Cache)**
+Flat, denormalized index entries optimized for O(1) hash lookups. Materialized
+from Tier 1 by the index builder. This is the ONLY data structure the interceptor
+reads at decision time.
+
+## Data Flow Phases
+
+### Phase 1: Ingestion
+OTel-native passive ingestion from existing log pipelines (CloudWatch, Datadog,
+cloud billing APIs). No bespoke host-level agents. Integration contract defines
+minimum required fields, optional enrichment, and fallback behavior.
+
+Connectors: AWS CUR, CloudTrail, Bedrock Telemetry, GitHub Webhooks, Workday HRIS.
+
+### Phase 2: Reconciliation (HRE)
+The Heuristic Reconciliation Engine processes events and resolves entities across
+disconnected enterprise systems. Six methods with calibrated confidence:
+
+| Method | Strategy | Confidence Range | Example |
+|--------|----------|------------------|---------|
+| R1 | Direct identifier matching | 0.98-1.00 | API key in team registry |
+| R2 | Temporal correlation | 0.70-0.95 | Deploy event 2min before traffic |
+| R3 | Naming convention analysis | 0.60-0.90 | `nlp-experiment-7` matches NLP team repos |
+| R4 | Historical pattern matching | 0.50-0.85 | Bayesian prior from past attributions |
+| R5 | Service account resolution | 0.50-0.75 | Shared account with deployment owners |
+| R6 | Proportional allocation | 0.30-0.65 | Fallback: split across known users |
+
+Multiple signals are combined via modified noisy-OR with dependency penalties.
+Combined confidence is capped at 0.95.
+
+### Phase 3: Attribution
+Graph traversal from workload through the six-layer attribution chain:
+Model -> Service -> Code -> Identity -> Organization -> Budget.
+
+Fractional attribution: cost is treated as a fluid splitting across weighted edges
+when multiple attribution paths exist.
+
+### Phase 4: Materialization
+The index builder transforms full attribution results into compact index entries
+for O(1) serving. Entries are versioned (old entries superseded, not overwritten).
+Incremental updates; full rebuild on backfill.
+
+### Phase 5: Interception
+Fail-open interceptor with 20ms timeout budget. Three deployment modes:
+Passive (observe), Advisory (enrich headers), Active (modify/redirect).
+Circuit breaker with probabilistic shadow warming for cache coherence.
+
+### Phase 6: Reporting
+Dashboards, compliance exports, federated benchmarks with differential privacy.
+
+## Event Sourcing
+
+The event bus (Kafka) is the system of record. The graph is derived state that
+can be rebuilt deterministically from the event log. This enables:
+- Backfill when late-arriving events require recomputation
+- Version replay when attribution logic is updated
+- Audit trail reconstruction for compliance
+
+## Confidence Governance
+
+Empirical calibration via isotonic regression, per reconciliation method.
+Three-tier calibration strategy based on ground truth sample count:
+- >= 200 samples: full isotonic regression
+- 50-199 samples: bootstrap confidence intervals
+- < 50 samples: conservative warm-start defaults
+
+Warm-start curves are derived from synthetic enterprise environments and
+progressively replaced as customer-specific ground truth accumulates.
+
+## TRAC Metric
+
+TRAC(workload) = Billed Cost + Carbon Liability + Confidence Risk Premium
+
+Near-term value: pricing data-quality risk in financial terms. Carbon is an
+embedded accounting line item that scales with future regulatory exposure.
+At current carbon prices ($50/tCO2e), TRAC is dominated by billed cost
+and confidence risk premium.
+
+## Security Model
+
+- Deployed within customer VPC (no data exfiltration)
+- mTLS for all inter-service communication
+- RBAC with team-scoped visibility
+- OPA-based policy enforcement
+- Non-root container execution
+- No secrets in images; injected at runtime
