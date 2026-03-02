@@ -129,7 +129,6 @@ class AttributionProcessor:
         """Process a deployment event: update graph with deployment linkages."""
         attrs = event.attributes
         service_name = attrs.get("service_name", "")
-        repository = attrs.get("repository", "")
         deployer = attrs.get("deployer_identity", "")
         target_arn = attrs.get("target_resource_arn", "")
 

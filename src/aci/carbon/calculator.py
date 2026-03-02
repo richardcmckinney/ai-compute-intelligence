@@ -12,7 +12,6 @@ provenance for compliance exports and third-party audit.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
 
 from aci.config import CarbonConfig
 from aci.models.carbon import (

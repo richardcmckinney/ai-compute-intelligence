@@ -17,7 +17,7 @@ from aci.confidence.calibration import CalibrationEngine
 from aci.core.event_bus import InMemoryEventBus
 from aci.equivalence.verifier import EquivalenceClass, EquivalenceVerifier
 from aci.graph.store import GraphStore
-from aci.hre.engine import HeuristicReconciliationEngine, ReconciliationContext
+from aci.hre.engine import HeuristicReconciliationEngine
 from aci.index.materializer import AttributionIndexStore, IndexMaterializer
 from aci.interceptor.gateway import DeploymentMode, FailOpenInterceptor
 from aci.models.attribution import AttributionIndexEntry

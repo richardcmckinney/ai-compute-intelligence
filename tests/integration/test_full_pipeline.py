@@ -9,7 +9,6 @@ Each test corresponds to a worked example from Section 13 of the patent spec.
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timedelta, timezone
 
 import pytest

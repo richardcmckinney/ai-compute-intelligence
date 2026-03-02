@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-import pytest
 
 from aci.hre.combination import CombinationConfig, combine_evidence, combine_noisy_or_simple
 from aci.hre.engine import HeuristicReconciliationEngine, ReconciliationContext

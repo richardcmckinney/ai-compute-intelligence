@@ -11,7 +11,7 @@ When R1 fails, R2-R6 are attempted and combined via noisy-OR.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 import structlog
 

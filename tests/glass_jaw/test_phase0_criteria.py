@@ -20,12 +20,7 @@ sustained load test is run via the Locust load test configuration.
 from __future__ import annotations
 
 import asyncio
-import gc
-import os
-import statistics
-import sys
 import time
-from datetime import datetime, timezone
 
 import pytest
 
@@ -125,7 +120,6 @@ class TestLatencyBudget:
 
         p50 = sorted(latencies)[500]
         p99 = sorted(latencies)[990]
-        mean_lat = statistics.mean(latencies)
 
         assert p99 < 15.0, f"P99={p99:.2f}ms exceeds 15ms budget"
         assert p50 < 5.0, f"P50={p50:.2f}ms is unexpectedly high"

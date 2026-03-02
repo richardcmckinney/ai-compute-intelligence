@@ -4,13 +4,10 @@ Unit tests for confidence calibration, TRAC calculator, and fail-open intercepto
 
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime, timezone
 
 import pytest
 
 from aci.confidence.calibration import CalibrationEngine
-from aci.config import ConfidenceConfig, TRACConfig
 from aci.index.materializer import AttributionIndexStore
 from aci.interceptor.gateway import (
     DeploymentMode,
