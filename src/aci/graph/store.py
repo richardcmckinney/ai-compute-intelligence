@@ -8,11 +8,12 @@ NEVER reads from this store; it reads only from the attribution index (Tier 2).
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from collections import defaultdict
+from datetime import UTC, datetime
 
 import structlog
 
-from aci.models.graph import GraphEdge, GraphNode, NodeType
+from aci.models.graph import EdgeType, GraphEdge, GraphNode, NodeType
 
 logger = structlog.get_logger()
 
@@ -30,12 +31,15 @@ class GraphStore:
     def __init__(self) -> None:
         self.nodes: dict[str, GraphNode] = {}
         self.edges: list[GraphEdge] = []
+        self._from_index: dict[str, list[int]] = defaultdict(list)
+        self._to_index: dict[str, list[int]] = defaultdict(list)
+        self._active_edge_index: dict[tuple[str, str, EdgeType], int] = {}
 
     def upsert_node(self, node: GraphNode) -> None:
         """Insert or update a node."""
         existing = self.nodes.get(node.node_id)
         if existing:
-            node = node.model_copy(update={"updated_at": datetime.now(timezone.utc)})
+            node = node.model_copy(update={"updated_at": datetime.now(UTC)})
         self.nodes[node.node_id] = node
 
     def add_edge(self, edge: GraphEdge) -> None:
@@ -45,20 +49,20 @@ class GraphStore:
         Edges are append-only: when relationships change, the old edge
         gets a valid_to timestamp and a new edge is created.
         """
-        # Close any existing edge of the same type between these nodes.
-        now = datetime.now(timezone.utc)
-        for existing in self.edges:
-            if (
-                existing.from_id == edge.from_id
-                and existing.to_id == edge.to_id
-                and existing.edge_type == edge.edge_type
-                and existing.valid_to is None
-            ):
-                # Close the existing edge.
-                idx = self.edges.index(existing)
-                self.edges[idx] = existing.model_copy(update={"valid_to": now})
+        key = (edge.from_id, edge.to_id, edge.edge_type)
+        now = datetime.now(UTC)
 
+        existing_idx = self._active_edge_index.get(key)
+        if existing_idx is not None:
+            existing = self.edges[existing_idx]
+            if existing.valid_to is None:
+                self.edges[existing_idx] = existing.model_copy(update={"valid_to": now})
+
+        new_idx = len(self.edges)
         self.edges.append(edge)
+        self._from_index[edge.from_id].append(new_idx)
+        self._to_index[edge.to_id].append(new_idx)
+        self._active_edge_index[key] = new_idx
 
     def get_node(self, node_id: str) -> GraphNode | None:
         return self.nodes.get(node_id)
@@ -73,13 +77,13 @@ class GraphStore:
 
         Time-versioned query: returns only edges valid at the specified time.
         """
-        at = at_time or datetime.now(timezone.utc)
-        return [
-            e for e in self.edges
-            if e.from_id == node_id
-            and e.valid_from <= at
-            and (e.valid_to is None or e.valid_to > at)
-        ]
+        at = at_time or datetime.now(UTC)
+        results: list[GraphEdge] = []
+        for idx in self._from_index.get(node_id, []):
+            edge = self.edges[idx]
+            if edge.valid_from <= at and (edge.valid_to is None or edge.valid_to > at):
+                results.append(edge)
+        return results
 
     def get_edges_to(
         self,
@@ -87,13 +91,13 @@ class GraphStore:
         at_time: datetime | None = None,
     ) -> list[GraphEdge]:
         """Get all incoming edges to a node, optionally at a point in time."""
-        at = at_time or datetime.now(timezone.utc)
-        return [
-            e for e in self.edges
-            if e.to_id == node_id
-            and e.valid_from <= at
-            and (e.valid_to is None or e.valid_to > at)
-        ]
+        at = at_time or datetime.now(UTC)
+        results: list[GraphEdge] = []
+        for idx in self._to_index.get(node_id, []):
+            edge = self.edges[idx]
+            if edge.valid_from <= at and (edge.valid_to is None or edge.valid_to > at):
+                results.append(edge)
+        return results
 
     def traverse_attribution(
         self,
@@ -155,7 +159,7 @@ class GraphStore:
 
     def get_stats(self) -> dict[str, int]:
         """Graph statistics."""
-        active_edges = sum(1 for e in self.edges if e.valid_to is None)
+        active_edges = len(self._active_edge_index)
         return {
             "total_nodes": len(self.nodes),
             "total_edges": len(self.edges),

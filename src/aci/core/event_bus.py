@@ -12,9 +12,10 @@ implementation for production.
 from __future__ import annotations
 
 import asyncio
+import inspect
 from collections import defaultdict, deque
-from datetime import datetime, timezone
-from typing import Callable
+from collections.abc import Awaitable, Callable
+from datetime import datetime
 
 import structlog
 
@@ -22,7 +23,7 @@ from aci.models.events import DomainEvent
 
 logger = structlog.get_logger()
 
-EventHandler = Callable[[DomainEvent], None]
+EventHandler = Callable[[DomainEvent], None | Awaitable[None]]
 
 
 class InMemoryEventBus:
@@ -42,10 +43,19 @@ class InMemoryEventBus:
 
         # Idempotency deduplication.
         self._seen_keys: set[str] = set()
+        self._idempotency_order: deque[str] = deque()
+        self._max_idempotency_keys: int = max_events * 2
 
         # Metrics.
         self._published_count: int = 0
         self._deduplicated_count: int = 0
+        self._idempotency_evictions: int = 0
+        self._topic_counts: dict[str, int] = defaultdict(int)
+        self._dispatch_errors: int = 0
+
+        # Concurrency controls.
+        self._state_lock = asyncio.Lock()
+        self._dispatch_semaphore = asyncio.Semaphore(64)
 
     async def publish(self, event: DomainEvent) -> bool:
         """
@@ -53,36 +63,73 @@ class InMemoryEventBus:
 
         Returns False if the event was deduplicated (idempotency_key seen before).
         """
-        # Idempotency check.
         dedup_key = f"{event.source}:{event.idempotency_key}"
-        if dedup_key in self._seen_keys:
-            self._deduplicated_count += 1
-            return False
-
-        self._seen_keys.add(dedup_key)
-        self._log.append(event)
-        self._published_count += 1
-
-        # Dispatch to topic handlers.
         topic = event.event_type.value
-        for handler in self._handlers.get(topic, []):
-            try:
-                handler(event)
-            except Exception as exc:
-                logger.error("event_bus.handler_error", topic=topic, error=str(exc))
 
-        # Also dispatch to wildcard handlers.
-        for handler in self._handlers.get("*", []):
-            try:
-                handler(event)
-            except Exception as exc:
-                logger.error("event_bus.wildcard_handler_error", error=str(exc))
+        async with self._state_lock:
+            if dedup_key in self._seen_keys:
+                self._deduplicated_count += 1
+                return False
 
+            self._seen_keys.add(dedup_key)
+            self._idempotency_order.append(dedup_key)
+
+            if len(self._idempotency_order) > self._max_idempotency_keys:
+                evicted_key = self._idempotency_order.popleft()
+                self._seen_keys.discard(evicted_key)
+                self._idempotency_evictions += 1
+
+            self._log.append(event)
+            self._published_count += 1
+            self._topic_counts[topic] += 1
+
+        handlers = [
+            *(self._handlers.get(topic, [])),
+            *(self._handlers.get("*", [])),
+        ]
+        if not handlers:
+            return True
+
+        await asyncio.gather(
+            *(self._dispatch_handler(topic, handler, event) for handler in handlers)
+        )
         return True
 
     def subscribe(self, topic: str, handler: EventHandler) -> None:
         """Subscribe a handler to a topic. Use '*' for all events."""
         self._handlers[topic].append(handler)
+
+    async def publish_batch(self, events: list[DomainEvent]) -> dict[str, int]:
+        """Publish a batch of events and return publish/dedup counts."""
+        published = 0
+        deduplicated = 0
+        for event in events:
+            accepted = await self.publish(event)
+            if accepted:
+                published += 1
+            else:
+                deduplicated += 1
+        return {"published": published, "deduplicated": deduplicated}
+
+    async def _dispatch_handler(
+        self,
+        topic: str,
+        handler: EventHandler,
+        event: DomainEvent,
+    ) -> None:
+        """Invoke handlers safely, supporting both sync and async callbacks."""
+        async with self._dispatch_semaphore:
+            try:
+                maybe_result = handler(event)
+                if inspect.isawaitable(maybe_result):
+                    await maybe_result
+            except Exception as exc:
+                self._dispatch_errors += 1
+                logger.error(
+                    "event_bus.handler_error",
+                    topic=topic,
+                    error=str(exc),
+                )
 
     def replay(
         self,
@@ -113,5 +160,9 @@ class InMemoryEventBus:
             "total_events": len(self._log),
             "published": self._published_count,
             "deduplicated": self._deduplicated_count,
+            "idempotency_cache_size": len(self._seen_keys),
+            "idempotency_evictions": self._idempotency_evictions,
+            "dispatch_errors": self._dispatch_errors,
             "topics": list(self._handlers.keys()),
+            "published_by_topic": dict(self._topic_counts),
         }

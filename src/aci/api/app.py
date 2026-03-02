@@ -10,15 +10,21 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
 import structlog
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
 from aci.config import PlatformConfig
 from aci.confidence.calibration import CalibrationEngine
+from aci.core.event_bus import InMemoryEventBus
+from aci.core.processor import AttributionProcessor
 from aci.equivalence.verifier import EquivalenceVerifier
+from aci.graph.store import GraphStore
 from aci.hre.engine import HeuristicReconciliationEngine
 from aci.index.materializer import AttributionIndexStore, IndexMaterializer
 from aci.interceptor.gateway import (
@@ -27,6 +33,7 @@ from aci.interceptor.gateway import (
     InterceptionOutcome,
     InterceptionRequest,
 )
+from aci.models.events import DomainEvent, EventType
 from aci.policy.engine import PolicyEngine
 from aci.trac.calculator import TRACCalculator
 
@@ -42,17 +49,32 @@ class AppState:
 
     def __init__(self) -> None:
         self.config = PlatformConfig()
-        self.index_store = AttributionIndexStore()
+        self.event_bus = InMemoryEventBus()
+        self.graph = GraphStore()
+
+        self.index_store = AttributionIndexStore(max_entries=self.config.index_max_entries)
         self.materializer = IndexMaterializer(self.index_store, self.config)
         self.hre = HeuristicReconciliationEngine()
         self.calibration = CalibrationEngine(self.config.confidence)
         self.trac = TRACCalculator(self.config.trac, self.config.confidence)
         self.policy_engine = PolicyEngine()
         self.equivalence = EquivalenceVerifier(self.config.equivalence)
+
+        # Closed-loop processor: ingestion -> reconciliation -> materialization.
+        self.processor = AttributionProcessor(
+            event_bus=self.event_bus,
+            graph_store=self.graph,
+            hre=self.hre,
+            calibration=self.calibration,
+            materializer=self.materializer,
+            policy_engine=self.policy_engine,
+        )
+
         self.interceptor = FailOpenInterceptor(
             self.index_store,
             self.config.interceptor,
             mode=DeploymentMode.ADVISORY,
+            event_bus=self.event_bus,
         )
 
 
@@ -70,14 +92,26 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="ACI Platform",
     description="AI Compute Intelligence: application-level cost and carbon attribution",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
+
+# Serve improved platform mockup from the repo.
+frontend_dir = Path(__file__).resolve().parents[3] / "frontend"
+if frontend_dir.exists():
+    app.mount("/platform", StaticFiles(directory=str(frontend_dir), html=True), name="platform")
 
 
 # ---------------------------------------------------------------------------
 # Request / Response models
 # ---------------------------------------------------------------------------
+
+class RootResponse(BaseModel):
+    name: str
+    version: str
+    health_url: str
+    mockup_url: str | None
+
 
 class HealthResponse(BaseModel):
     status: str
@@ -136,16 +170,67 @@ class IndexLookupResponse(BaseModel):
     version: int
 
 
+class EventIngestRequest(BaseModel):
+    event_type: EventType
+    subject_id: str
+    attributes: dict[str, Any] = Field(default_factory=dict)
+    event_time: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    source: str
+    idempotency_key: str
+
+
+class EventIngestResponse(BaseModel):
+    accepted: bool
+    event_id: str
+
+
+class EventBatchIngestRequest(BaseModel):
+    events: list[EventIngestRequest]
+
+
+class EventBatchIngestResponse(BaseModel):
+    total: int
+    accepted: int
+    deduplicated: int
+
+
+class DashboardOverviewResponse(BaseModel):
+    tenant_id: str
+    environment: str
+    generated_at: str
+    index_size: int
+    index_hit_rate: float
+    interceptor_requests: int
+    interceptor_enriched: int
+    interceptor_fail_open: int
+    interceptor_cache_misses: int
+    interceptor_mode: str
+    circuit_breaker_state: str
+    events_published: int
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
+@app.get("/", response_model=RootResponse)
+async def root() -> RootResponse:
+    """Root metadata and quick links."""
+    mockup_url = "/platform/" if frontend_dir.exists() else None
+    return RootResponse(
+        name="ACI Platform",
+        version="0.2.0",
+        health_url="/health",
+        mockup_url=mockup_url,
+    )
+
+
 @app.get("/health", response_model=HealthResponse)
-async def health():
+async def health() -> HealthResponse:
     """Platform health check."""
     return HealthResponse(
         status="healthy",
-        timestamp=datetime.now(timezone.utc).isoformat(),
+        timestamp=datetime.now(UTC).isoformat(),
         index_size=state.index_store.size,
         interceptor_mode=state.interceptor.mode.value,
         circuit_breaker=state.interceptor.circuit_breaker.state,
@@ -153,16 +238,57 @@ async def health():
 
 
 @app.get("/metrics")
-async def metrics():
+async def metrics() -> dict[str, dict[str, Any]]:
     """Platform metrics for monitoring."""
     return {
         "index": state.index_store.stats,
         "interceptor": state.interceptor.stats,
+        "processor": state.processor.stats,
+        "event_bus": state.event_bus.stats,
     }
 
 
+@app.post("/v1/events/ingest", response_model=EventIngestResponse)
+async def ingest_event(req: EventIngestRequest) -> EventIngestResponse:
+    """Ingest a single domain event into the append-only bus."""
+    event = DomainEvent(
+        event_type=req.event_type,
+        subject_id=req.subject_id,
+        attributes=req.attributes,
+        event_time=req.event_time,
+        source=req.source,
+        idempotency_key=req.idempotency_key,
+        tenant_id=state.config.tenant_id,
+    )
+    accepted = await state.event_bus.publish(event)
+    return EventIngestResponse(accepted=accepted, event_id=event.event_id)
+
+
+@app.post("/v1/events/ingest/batch", response_model=EventBatchIngestResponse)
+async def ingest_events_batch(req: EventBatchIngestRequest) -> EventBatchIngestResponse:
+    """Ingest a batch of domain events with idempotency-aware accounting."""
+    events = [
+        DomainEvent(
+            event_type=e.event_type,
+            subject_id=e.subject_id,
+            attributes=e.attributes,
+            event_time=e.event_time,
+            source=e.source,
+            idempotency_key=e.idempotency_key,
+            tenant_id=state.config.tenant_id,
+        )
+        for e in req.events
+    ]
+    result = await state.event_bus.publish_batch(events)
+    return EventBatchIngestResponse(
+        total=len(events),
+        accepted=result["published"],
+        deduplicated=result["deduplicated"],
+    )
+
+
 @app.post("/v1/intercept", response_model=InterceptResponse)
-async def intercept(req: InterceptRequest):
+async def intercept(req: InterceptRequest) -> InterceptResponse:
     """
     Decision-time interception endpoint with framework-level timeout.
 
@@ -186,7 +312,7 @@ async def intercept(req: InterceptRequest):
             state.interceptor.intercept(interception_req),
             timeout=state.config.interceptor.total_budget_ms / 1000.0,
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return InterceptResponse(
             request_id=req.request_id,
             outcome=InterceptionOutcome.TIMEOUT.value,
@@ -213,7 +339,7 @@ async def intercept(req: InterceptRequest):
 
 
 @app.post("/v1/trac", response_model=TRACResponse)
-async def compute_trac(req: TRACRequest):
+async def compute_trac(req: TRACRequest) -> TRACResponse:
     """Compute TRAC for a workload."""
     result = state.trac.compute(
         workload_id=req.workload_id,
@@ -234,7 +360,7 @@ async def compute_trac(req: TRACRequest):
 
 
 @app.get("/v1/attribution/{workload_id}", response_model=IndexLookupResponse)
-async def get_attribution(workload_id: str):
+async def get_attribution(workload_id: str) -> IndexLookupResponse:
     """Look up current attribution for a workload."""
     entry = state.index_store.lookup(workload_id)
     if entry is None:
@@ -253,6 +379,29 @@ async def get_attribution(workload_id: str):
 
 
 @app.get("/v1/index/stats")
-async def index_stats():
+async def index_stats() -> dict[str, Any]:
     """Attribution index statistics."""
     return state.index_store.stats
+
+
+@app.get("/v1/dashboard/overview", response_model=DashboardOverviewResponse)
+async def dashboard_overview() -> DashboardOverviewResponse:
+    """Frontend-ready overview metrics for the platform dashboard."""
+    interceptor_stats = state.interceptor.stats
+    index_stats_payload = state.index_store.stats
+    event_stats = state.event_bus.stats
+
+    return DashboardOverviewResponse(
+        tenant_id=state.config.tenant_id,
+        environment=state.config.environment,
+        generated_at=datetime.now(UTC).isoformat(),
+        index_size=index_stats_payload.get("size", 0),
+        index_hit_rate=index_stats_payload.get("hit_rate", 0.0),
+        interceptor_requests=interceptor_stats.get("total_requests", 0),
+        interceptor_enriched=interceptor_stats.get("total_enriched", 0),
+        interceptor_fail_open=interceptor_stats.get("total_fail_open", 0),
+        interceptor_cache_misses=interceptor_stats.get("total_cache_misses", 0),
+        interceptor_mode=interceptor_stats.get("mode", "advisory"),
+        circuit_breaker_state=interceptor_stats.get("circuit_breaker_state", "closed"),
+        events_published=event_stats.get("published", 0),
+    )

@@ -21,6 +21,14 @@ Phase 5: Interception   Fail-open interceptor reads index via O(1) lookups
 Phase 6: Reporting      Dashboards, compliance exports, federated benchmarks
 ```
 
+### Runtime Upgrades (v0.2)
+
+- `InMemoryEventBus` now supports mixed sync/async handlers, bounded idempotency-key memory, and batch publish accounting.
+- `GraphStore` now maintains adjacency indexes and active-edge indexes to avoid full edge-list scans as graph size grows.
+- `AttributionIndexStore` now uses bounded LRU retention with eviction metrics to prevent unbounded memory growth.
+- `CircuitBreaker` half-open behavior now enforces explicit probe limits before reopening/closing.
+- `FailOpenInterceptor` now resolves workload IDs more robustly and hardens shadow-event emission behavior.
+
 ### Core Innovations
 
 **Heuristic Reconciliation Engine (HRE):** Derives entity linkages from dirty, disconnected enterprise systems using six reconciliation methods (R1-R6) with calibrated confidence scores. Probabilistic reconciliation is the primary attribution method; deterministic paths are a special case.
@@ -128,6 +136,19 @@ mypy src/aci/ --ignore-missing-imports
 
 # Run the API server.
 uvicorn aci.api.app:app --reload --port 8000
+```
+
+## Frontend Mockup
+
+The repository now includes two platform mockups:
+
+- `frontend/platform-mockup-v3.html`: original source artifact you provided.
+- `frontend/index.html`: improved v4 mockup with stronger information hierarchy, mobile responsiveness, and live fetch to `/v1/dashboard/overview`.
+
+When running the API, the mockup is served at:
+
+```bash
+http://localhost:8000/platform/
 ```
 
 ## Key Design Decisions

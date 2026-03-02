@@ -59,6 +59,7 @@ class CircuitBreaker:
         self._half_open_max_probes = half_open_max_probes
         self._last_failure_time: float = 0.0
         self._half_open_success_count: int = 0
+        self._half_open_probe_count: int = 0
 
         # Counters for monitoring.
         self.total_opens: int = 0
@@ -70,6 +71,9 @@ class CircuitBreaker:
         if self._state == CircuitState.OPEN:
             elapsed = time.monotonic() - self._last_failure_time
             if elapsed >= self._reset_timeout_s:
+                self._state = CircuitState.HALF_OPEN
+                self._half_open_success_count = 0
+                self._half_open_probe_count = 0
                 return CircuitState.HALF_OPEN.value
         return self._state.value
 
@@ -82,8 +86,10 @@ class CircuitBreaker:
             return True
         if current == CircuitState.HALF_OPEN.value:
             # Allow limited probes.
-            if self._half_open_success_count < self._half_open_max_probes:
+            if self._half_open_probe_count < self._half_open_max_probes:
+                self._half_open_probe_count += 1
                 return False
+            self.total_fail_opens += 1
             return True
         return False
 
@@ -95,6 +101,7 @@ class CircuitBreaker:
                 self._state = CircuitState.CLOSED
                 self._failure_count = 0
                 self._half_open_success_count = 0
+                self._half_open_probe_count = 0
                 logger.info("circuit_breaker.closed", reason="probes_succeeded")
         else:
             self._failure_count = 0
@@ -102,17 +109,23 @@ class CircuitBreaker:
 
     def record_failure(self) -> None:
         """Record a failed enrichment operation."""
-        self._failure_count += 1
-        self._last_failure_time = time.monotonic()
-
         if self._state == CircuitState.HALF_OPEN or self.state == CircuitState.HALF_OPEN.value:
             self._state = CircuitState.OPEN
             self._half_open_success_count = 0
+            self._half_open_probe_count = 0
+            self._failure_count = self._failure_threshold
+            self._last_failure_time = time.monotonic()
             self.total_opens += 1
             logger.warning("circuit_breaker.reopened", reason="probe_failed")
-        elif self._failure_count >= self._failure_threshold:
+            return
+
+        self._failure_count += 1
+        self._last_failure_time = time.monotonic()
+
+        if self._failure_count >= self._failure_threshold:
             self._state = CircuitState.OPEN
             self._half_open_success_count = 0
+            self._half_open_probe_count = 0
             self.total_opens += 1
             logger.warning(
                 "circuit_breaker.opened",
@@ -124,6 +137,8 @@ class CircuitBreaker:
         """Force the circuit open (e.g., during maintenance)."""
         self._state = CircuitState.OPEN
         self._last_failure_time = time.monotonic()
+        self._half_open_success_count = 0
+        self._half_open_probe_count = 0
         self.total_opens += 1
         logger.info("circuit_breaker.force_opened")
 
@@ -132,6 +147,7 @@ class CircuitBreaker:
         self._state = CircuitState.CLOSED
         self._failure_count = 0
         self._half_open_success_count = 0
+        self._half_open_probe_count = 0
         logger.info("circuit_breaker.force_closed")
 
     def get_metrics(self) -> dict:
@@ -140,6 +156,7 @@ class CircuitBreaker:
             "state": self.state,
             "failure_count": self._failure_count,
             "failure_threshold": self._failure_threshold,
+            "half_open_probe_count": self._half_open_probe_count,
             "total_opens": self.total_opens,
             "total_fail_opens": self.total_fail_opens,
         }

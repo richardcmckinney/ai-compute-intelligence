@@ -12,9 +12,9 @@ Old entries are not overwritten; they are superseded with version metadata.
 
 from __future__ import annotations
 
-import hashlib
-import time
-from datetime import datetime, timezone
+from collections import OrderedDict
+from datetime import UTC, datetime
+from threading import RLock
 
 import structlog
 
@@ -32,17 +32,22 @@ class AttributionIndexStore:
     The interceptor reads ONLY from this store; never from the graph.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, max_entries: int = 250_000) -> None:
         # Primary index: workload_id -> AttributionIndexEntry.
-        self._index: dict[str, AttributionIndexEntry] = {}
+        self._index: OrderedDict[str, AttributionIndexEntry] = OrderedDict()
 
         # Version tracking for cache coherence.
         self._versions: dict[str, int] = {}
+        self._max_entries = max_entries
 
         # Metrics.
         self._hit_count: int = 0
         self._miss_count: int = 0
         self._materialization_count: int = 0
+        self._eviction_count: int = 0
+
+        # Single-process synchronization for mixed async/sync callers.
+        self._lock = RLock()
 
     def lookup(self, workload_id: str) -> AttributionIndexEntry | None:
         """
@@ -51,12 +56,15 @@ class AttributionIndexStore:
         This is the ONLY method called on the decision-time critical path.
         It must complete in < 5ms under all conditions.
         """
-        entry = self._index.get(workload_id)
-        if entry is not None:
-            self._hit_count += 1
-        else:
-            self._miss_count += 1
-        return entry
+        with self._lock:
+            entry = self._index.get(workload_id)
+            if entry is not None:
+                self._hit_count += 1
+                # LRU bump: recently read entries stay hot in memory.
+                self._index.move_to_end(workload_id)
+            else:
+                self._miss_count += 1
+            return entry
 
     def lookup_batch(self, workload_ids: list[str]) -> dict[str, AttributionIndexEntry | None]:
         """Batch lookup for multiple workload IDs."""
@@ -64,22 +72,29 @@ class AttributionIndexStore:
 
     @property
     def size(self) -> int:
-        return len(self._index)
+        with self._lock:
+            return len(self._index)
 
     @property
     def hit_rate(self) -> float:
-        total = self._hit_count + self._miss_count
-        return self._hit_count / total if total > 0 else 0.0
+        with self._lock:
+            total = self._hit_count + self._miss_count
+            return self._hit_count / total if total > 0 else 0.0
 
     @property
     def stats(self) -> dict:
-        return {
-            "size": self.size,
-            "hits": self._hit_count,
-            "misses": self._miss_count,
-            "hit_rate": round(self.hit_rate, 4),
-            "materializations": self._materialization_count,
-        }
+        with self._lock:
+            total = self._hit_count + self._miss_count
+            hit_rate = self._hit_count / total if total > 0 else 0.0
+            return {
+                "size": len(self._index),
+                "max_entries": self._max_entries,
+                "hits": self._hit_count,
+                "misses": self._miss_count,
+                "hit_rate": round(hit_rate, 4),
+                "materializations": self._materialization_count,
+                "evictions": self._eviction_count,
+            }
 
     def materialize(self, entry: AttributionIndexEntry) -> None:
         """
@@ -88,17 +103,27 @@ class AttributionIndexStore:
         Entries are versioned. Old entries are superseded, not overwritten,
         preserving the ability to reconstruct historical state.
         """
-        current_version = self._versions.get(entry.workload_id, 0)
-        new_version = current_version + 1
+        with self._lock:
+            current_version = self._versions.get(entry.workload_id, 0)
+            new_version = current_version + 1
 
-        entry_with_version = entry.model_copy(update={
-            "version": new_version,
-            "materialized_at": datetime.now(timezone.utc),
-        })
+            entry_with_version = entry.model_copy(
+                update={
+                    "version": new_version,
+                    "materialized_at": datetime.now(UTC),
+                }
+            )
 
-        self._index[entry.workload_id] = entry_with_version
-        self._versions[entry.workload_id] = new_version
-        self._materialization_count += 1
+            self._index[entry.workload_id] = entry_with_version
+            self._index.move_to_end(entry.workload_id)
+            self._versions[entry.workload_id] = new_version
+            self._materialization_count += 1
+
+            # Enforce bounded memory usage via LRU eviction.
+            while len(self._index) > self._max_entries:
+                evicted_workload_id, _ = self._index.popitem(last=False)
+                self._versions.pop(evicted_workload_id, None)
+                self._eviction_count += 1
 
         logger.debug(
             "index.materialized",
@@ -109,15 +134,18 @@ class AttributionIndexStore:
 
     def evict(self, workload_id: str) -> bool:
         """Remove an entry from the index (e.g., resource deleted)."""
-        if workload_id in self._index:
-            del self._index[workload_id]
-            return True
-        return False
+        with self._lock:
+            if workload_id in self._index:
+                del self._index[workload_id]
+                self._versions.pop(workload_id, None)
+                return True
+            return False
 
     def clear(self) -> None:
         """Full index clear for rebuild."""
-        self._index.clear()
-        self._versions.clear()
+        with self._lock:
+            self._index.clear()
+            self._versions.clear()
 
 
 class IndexMaterializer:
@@ -214,7 +242,7 @@ class IndexMaterializer:
     @staticmethod
     def _compute_time_bucket() -> str:
         """Compute discrete time bucket for deterministic reconstruction."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         # 15-minute buckets for reasonable granularity.
         bucket_min = (now.minute // 15) * 15
         return now.strftime(f"%Y-%m-%dT%H:{bucket_min:02d}:00Z")

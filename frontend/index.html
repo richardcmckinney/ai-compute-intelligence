@@ -1,0 +1,799 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ACI Platform Mockup v4</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink-900: #102226;
+      --ink-800: #163238;
+      --ink-700: #1f454d;
+      --mint-500: #2bc2a0;
+      --mint-400: #58d4b8;
+      --sand-100: #f8f4e9;
+      --sand-200: #f0e7d5;
+      --sand-300: #e4d7ba;
+      --orange-500: #ef7f42;
+      --orange-300: #f7b489;
+      --teal-500: #237a8a;
+      --card-shadow: 0 18px 40px rgba(16, 34, 38, 0.08);
+      --radius-lg: 18px;
+      --radius-md: 12px;
+      --radius-sm: 8px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: "Space Grotesk", sans-serif;
+      color: var(--ink-900);
+      background: radial-gradient(circle at 8% 10%, #f6efd8 0%, transparent 42%),
+        radial-gradient(circle at 94% 92%, #d6efe9 0%, transparent 40%),
+        linear-gradient(135deg, var(--sand-100), #f5f8f8 45%, #f0f7f6);
+      min-height: 100vh;
+      line-height: 1.4;
+    }
+
+    .shell {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 24px;
+      display: grid;
+      gap: 18px;
+      grid-template-columns: 240px 1fr;
+    }
+
+    .rail,
+    .panel,
+    .hero {
+      background: rgba(255, 255, 255, 0.78);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(22, 50, 56, 0.12);
+      box-shadow: var(--card-shadow);
+      border-radius: var(--radius-lg);
+    }
+
+    .rail {
+      padding: 18px;
+      position: sticky;
+      top: 24px;
+      height: fit-content;
+      animation: rise 420ms ease-out;
+    }
+
+    .brand {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid rgba(16, 34, 38, 0.1);
+    }
+
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 11px;
+      background: linear-gradient(140deg, var(--teal-500), var(--mint-500));
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .brand h1 {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+
+    .brand p {
+      font-size: 10px;
+      opacity: 0.7;
+      margin-top: 2px;
+    }
+
+    .rail nav {
+      display: grid;
+      gap: 6px;
+    }
+
+    .rail button {
+      text-align: left;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--ink-700);
+      padding: 8px 10px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: 150ms ease;
+      font-size: 13px;
+    }
+
+    .rail button:hover,
+    .rail button.active {
+      background: rgba(43, 194, 160, 0.15);
+      border-color: rgba(43, 194, 160, 0.35);
+      color: var(--ink-900);
+    }
+
+    .main {
+      display: grid;
+      gap: 18px;
+    }
+
+    .hero {
+      padding: 22px;
+      display: grid;
+      gap: 14px;
+      animation: rise 460ms ease-out;
+    }
+
+    .hero-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .hero h2 {
+      font-size: clamp(24px, 3vw, 34px);
+      line-height: 1.05;
+      max-width: 760px;
+      letter-spacing: -0.02em;
+    }
+
+    .hero p {
+      font-size: 14px;
+      color: var(--ink-700);
+      max-width: 760px;
+    }
+
+    .mode-pill {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ink-800);
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(43, 194, 160, 0.16);
+      border: 1px solid rgba(43, 194, 160, 0.28);
+      white-space: nowrap;
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .hero-meta span {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 11px;
+      border: 1px solid rgba(16, 34, 38, 0.12);
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.6);
+    }
+
+    .grid {
+      display: grid;
+      gap: 14px;
+    }
+
+    .grid.metrics {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      animation: rise 500ms ease-out;
+    }
+
+    .metric {
+      padding: 16px;
+      border-radius: var(--radius-md);
+      background: #fff;
+      border: 1px solid rgba(16, 34, 38, 0.1);
+      box-shadow: 0 6px 18px rgba(16, 34, 38, 0.06);
+    }
+
+    .metric .label {
+      font-size: 11px;
+      color: var(--ink-700);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 8px;
+      font-family: "IBM Plex Mono", monospace;
+    }
+
+    .metric .value {
+      font-size: clamp(20px, 2vw, 30px);
+      font-weight: 700;
+      color: var(--ink-900);
+      margin-bottom: 6px;
+      letter-spacing: -0.02em;
+    }
+
+    .metric .sub {
+      font-size: 12px;
+      color: var(--ink-700);
+    }
+
+    .panel {
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+      animation: rise 520ms ease-out;
+    }
+
+    .panel h3 {
+      font-size: 16px;
+      letter-spacing: -0.01em;
+    }
+
+    .panel p {
+      font-size: 13px;
+      color: var(--ink-700);
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 14px;
+    }
+
+    .trend {
+      border: 1px solid rgba(16, 34, 38, 0.1);
+      border-radius: var(--radius-md);
+      padding: 12px;
+      background: #fff;
+    }
+
+    .bars {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      height: 200px;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .bar-wrap {
+      flex: 1;
+      display: grid;
+      gap: 7px;
+      align-items: end;
+      justify-items: center;
+    }
+
+    .bar {
+      width: 100%;
+      border-radius: 8px 8px 4px 4px;
+      background: linear-gradient(180deg, var(--mint-500), var(--teal-500));
+      min-height: 8px;
+      transform-origin: bottom;
+      animation: grow 700ms ease both;
+    }
+
+    .bar-label {
+      font-size: 10px;
+      color: var(--ink-700);
+      font-family: "IBM Plex Mono", monospace;
+    }
+
+    .mono {
+      font-family: "IBM Plex Mono", monospace;
+    }
+
+    .flow {
+      display: grid;
+      gap: 8px;
+    }
+
+    .flow-step {
+      display: grid;
+      grid-template-columns: 28px 1fr auto;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid rgba(16, 34, 38, 0.1);
+      border-radius: var(--radius-sm);
+      padding: 10px;
+      background: #fff;
+    }
+
+    .step-num {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      font-weight: 700;
+      color: #fff;
+      background: linear-gradient(145deg, var(--orange-500), #cf5d27);
+      font-size: 12px;
+    }
+
+    .step-title {
+      font-size: 12px;
+      color: var(--ink-700);
+    }
+
+    .step-value {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ink-900);
+    }
+
+    .badge {
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      border: 1px solid rgba(16, 34, 38, 0.18);
+      background: rgba(35, 122, 138, 0.09);
+      color: var(--ink-800);
+      white-space: nowrap;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      border: 1px solid rgba(16, 34, 38, 0.1);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+
+    th,
+    td {
+      padding: 10px;
+      font-size: 12px;
+      border-bottom: 1px solid rgba(16, 34, 38, 0.08);
+      text-align: left;
+    }
+
+    th {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--ink-700);
+      background: #f8fdfc;
+      font-family: "IBM Plex Mono", monospace;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .intervention {
+      display: grid;
+      gap: 8px;
+    }
+
+    .intervention li {
+      list-style: none;
+      padding: 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(16, 34, 38, 0.1);
+      background: #fff;
+      display: grid;
+      gap: 6px;
+    }
+
+    .intervention h4 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink-900);
+    }
+
+    .intervention p {
+      font-size: 12px;
+      color: var(--ink-700);
+    }
+
+    .intervention .meta {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .fade-stagger > * {
+      animation: rise 500ms ease both;
+    }
+
+    .fade-stagger > *:nth-child(2) { animation-delay: 30ms; }
+    .fade-stagger > *:nth-child(3) { animation-delay: 60ms; }
+    .fade-stagger > *:nth-child(4) { animation-delay: 90ms; }
+
+    @keyframes rise {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes grow {
+      from { transform: scaleY(0); }
+      to { transform: scaleY(1); }
+    }
+
+    @media (max-width: 1100px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+
+      .rail {
+        position: static;
+      }
+
+      .grid.metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .kpi-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .shell {
+        padding: 14px;
+      }
+
+      .hero {
+        padding: 16px;
+      }
+
+      .hero-top {
+        flex-direction: column;
+      }
+
+      .grid.metrics {
+        grid-template-columns: 1fr;
+      }
+
+      .flow-step {
+        grid-template-columns: 28px 1fr;
+      }
+
+      .flow-step .badge {
+        grid-column: 1 / -1;
+        justify-self: start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="rail">
+      <div class="brand">
+        <div class="brand-mark">AI</div>
+        <div>
+          <h1>Compute Intelligence</h1>
+          <p>Optimizer Mode Platform</p>
+        </div>
+      </div>
+      <nav>
+        <button class="active">Overview</button>
+        <button>Attribution Chain</button>
+        <button>Interventions</button>
+        <button>Model Portfolio</button>
+        <button>Policy + Governance</button>
+        <button>Carbon + TRAC</button>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <section class="hero">
+        <div class="hero-top">
+          <div>
+            <h2>Decision-time AI workload optimization and governance for multi-cloud enterprise deployments.</h2>
+            <p>
+              v4 mockup derived from your `platform-mockup-v3.html`, updated with a clearer architecture narrative,
+              stronger visual hierarchy, and frontend hooks for live platform health and interception telemetry.
+            </p>
+          </div>
+          <div class="mode-pill" id="mode-pill">Advisory Mode</div>
+        </div>
+        <div class="hero-meta" id="hero-meta"></div>
+      </section>
+
+      <section class="grid metrics fade-stagger" id="metrics"></section>
+
+      <section class="panel">
+        <h3>Spend Trend and Optimization Opportunity</h3>
+        <p>Monthly AI spend trend from the supplied v3 dataset, with optimization lens aligned to the Phase 0 to Phase 3 roadmap.</p>
+        <div class="kpi-grid">
+          <div class="trend">
+            <div class="mono" style="font-size:11px;color:var(--ink-700)">MONTHLY SPEND ($K)</div>
+            <div class="bars" id="spend-bars"></div>
+          </div>
+          <div class="trend">
+            <div style="display:grid;gap:10px">
+              <div>
+                <div class="mono" style="font-size:11px;color:var(--ink-700)">TOP TEAM SPEND</div>
+                <div id="top-team" style="font-size:20px;font-weight:700;letter-spacing:-0.02em;margin-top:4px"></div>
+              </div>
+              <div>
+                <div class="mono" style="font-size:11px;color:var(--ink-700)">TOTAL OPTIMIZATION POTENTIAL</div>
+                <div id="waste-total" style="font-size:20px;font-weight:700;letter-spacing:-0.02em;margin-top:4px"></div>
+              </div>
+              <div>
+                <div class="mono" style="font-size:11px;color:var(--ink-700)">RECOMMENDED WEDGE</div>
+                <div style="font-size:13px;color:var(--ink-700);margin-top:4px">Model equivalence-driven routing in Advisory mode first.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>Attribution Chain (6 Layers)</h3>
+        <p>This rendering keeps the core chain from your source mockup: Model → Service → Code → Identity → Org → Budget.</p>
+        <div class="flow" id="chain"></div>
+      </section>
+
+      <section class="panel">
+        <h3>High-Confidence Intervention Queue</h3>
+        <ul class="intervention" id="interventions"></ul>
+      </section>
+
+      <section class="panel">
+        <h3>Team Portfolio</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Team</th>
+              <th>Spend</th>
+              <th>Budget</th>
+              <th>Waste Potential</th>
+              <th>Top Workload</th>
+            </tr>
+          </thead>
+          <tbody id="team-table"></tbody>
+        </table>
+      </section>
+
+      <section class="panel">
+        <h3>Model Portfolio</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>Provider</th>
+              <th>Spend</th>
+              <th>Latency</th>
+              <th>Variance</th>
+              <th>Trend</th>
+            </tr>
+          </thead>
+          <tbody id="model-table"></tbody>
+        </table>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const source = {
+      spendTrend: [
+        { m: "Aug", total: 412 },
+        { m: "Sep", total: 489 },
+        { m: "Oct", total: 567 },
+        { m: "Nov", total: 634 },
+        { m: "Dec", total: 718 },
+        { m: "Jan", total: 791 },
+        { m: "Feb", total: 847 },
+      ],
+      teams: [
+        { name: "Platform Engineering", spend: 218400, budget: 250000, waste: 31200, top: "Code Intelligence" },
+        { name: "ML Engineering", spend: 187600, budget: 200000, waste: 42800, top: "Training Pipeline" },
+        { name: "Product", spend: 134200, budget: 150000, waste: 18900, top: "Customer Copilot" },
+        { name: "Data Science", spend: 98700, budget: 120000, waste: 15200, top: "Analytics Engine" },
+        { name: "Customer Engineering", spend: 76300, budget: 90000, waste: 22100, top: "Support Automation" },
+      ],
+      models: [
+        { name: "gpt-4o", provider: "OpenAI", spend: 234100, latency: 1240, variance: "1x", trend: 12.4 },
+        { name: "claude-3.5-sonnet", provider: "Anthropic", spend: 198700, latency: 980, variance: "1x", trend: 18.7 },
+        { name: "gpt-4-turbo", provider: "OpenAI", spend: 142300, latency: 1680, variance: "1.5x", trend: -3.2 },
+        { name: "gpt-4o-mini", provider: "OpenAI", spend: 87200, latency: 420, variance: "0.14x", trend: 34.1 },
+        { name: "claude-3-haiku", provider: "Anthropic", spend: 64800, latency: 280, variance: "0.07x", trend: 22.3 },
+      ],
+      chain: [
+        { layer: "Model Invocation", value: "gpt-4o via AWS Bedrock", confidence: "1.00", method: "R1" },
+        { layer: "Service Attribution", value: "customer-copilot-prod", confidence: "1.00", method: "R1" },
+        { layer: "Code Ownership", value: "copilot-service/src/chains/support.py", confidence: "0.98", method: "R1" },
+        { layer: "Identity Resolution", value: "maria.santos@novatech.com", confidence: "0.94", method: "R2" },
+        { layer: "Org Hierarchy", value: "Product Engineering", confidence: "0.96", method: "R1" },
+        { layer: "Budget Attribution", value: "CC-4200 | GL 6120-AI-Services", confidence: "0.96", method: "R1" },
+      ],
+      interventions: [
+        {
+          title: "Route fallback traffic from gpt-4o to gpt-4o-mini",
+          detail: "Empirical equivalence (Mode 2a) across 500 shadow requests shows 97.3% quality parity.",
+          save: 31200,
+          confidence: 94,
+          risk: "low",
+        },
+        {
+          title: "Deduplicate embeddings in analytics workloads",
+          detail: "38% duplicate embedding requests detected in a 4-hour window.",
+          save: 18400,
+          confidence: 91,
+          risk: "low",
+        },
+        {
+          title: "Constrain staging model sprawl",
+          detail: "Enforce lower-cost allowlist in staging and route exceptions to team-lead review.",
+          save: 22800,
+          confidence: 87,
+          risk: "medium",
+        },
+      ],
+    };
+
+    const fmtMoney = (n) =>
+      new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
+
+    function renderHeroMeta(extra = {}) {
+      const heroMeta = document.getElementById("hero-meta");
+      const tags = [
+        "Tenant: NovaTech Industries",
+        "Mode progression: Passive → Advisory → Active",
+        "Fail-open interceptor: enabled",
+        `Events published: ${extra.events_published ?? "n/a"}`,
+      ];
+      heroMeta.innerHTML = tags.map((tag) => `<span>${tag}</span>`).join("");
+
+      if (extra.interceptor_mode) {
+        document.getElementById("mode-pill").textContent = `${extra.interceptor_mode[0].toUpperCase()}${extra.interceptor_mode.slice(1)} Mode`;
+      }
+    }
+
+    function renderMetrics(extra = {}) {
+      const totalSpend = source.teams.reduce((sum, t) => sum + t.spend, 0);
+      const totalWaste = source.teams.reduce((sum, t) => sum + t.waste, 0);
+      const totalBudget = source.teams.reduce((sum, t) => sum + t.budget, 0);
+      const coverage = Math.round((totalSpend / totalBudget) * 100);
+
+      const cards = [
+        { label: "Attributed Spend", value: fmtMoney(totalSpend), sub: "Cross-cloud, team-level AI attribution" },
+        { label: "Optimization Potential", value: fmtMoney(totalWaste), sub: "High-confidence monthly reduction path" },
+        { label: "Budget Utilization", value: `${coverage}%`, sub: "Current team portfolio against budget" },
+        { label: "Index Entries", value: `${extra.index_size ?? 0}`, sub: `Hit rate: ${(extra.index_hit_rate ?? 0).toFixed(2)}` },
+      ];
+
+      document.getElementById("metrics").innerHTML = cards
+        .map(
+          (card) => `
+            <article class="metric">
+              <div class="label">${card.label}</div>
+              <div class="value">${card.value}</div>
+              <div class="sub">${card.sub}</div>
+            </article>
+          `,
+        )
+        .join("");
+
+      const topTeam = source.teams.slice().sort((a, b) => b.spend - a.spend)[0];
+      document.getElementById("top-team").textContent = `${topTeam.name} · ${fmtMoney(topTeam.spend)}`;
+      document.getElementById("waste-total").textContent = fmtMoney(totalWaste);
+    }
+
+    function renderSpendTrend() {
+      const max = Math.max(...source.spendTrend.map((x) => x.total));
+      const bars = source.spendTrend
+        .map((row, idx) => {
+          const pct = Math.round((row.total / max) * 100);
+          return `
+            <div class="bar-wrap">
+              <div class="bar" style="height:${pct}%;animation-delay:${idx * 45}ms"></div>
+              <div class="bar-label">${row.m}</div>
+            </div>
+          `;
+        })
+        .join("");
+      document.getElementById("spend-bars").innerHTML = bars;
+    }
+
+    function renderChain() {
+      document.getElementById("chain").innerHTML = source.chain
+        .map(
+          (step, idx) => `
+          <div class="flow-step">
+            <div class="step-num">${idx + 1}</div>
+            <div>
+              <div class="step-title">${step.layer}</div>
+              <div class="step-value mono">${step.value}</div>
+            </div>
+            <div class="badge">${step.method} · ${step.confidence}</div>
+          </div>
+        `,
+        )
+        .join("");
+    }
+
+    function renderInterventions() {
+      document.getElementById("interventions").innerHTML = source.interventions
+        .map(
+          (it) => `
+            <li>
+              <h4>${it.title}</h4>
+              <p>${it.detail}</p>
+              <div class="meta">
+                <span class="badge">Savings ${fmtMoney(it.save)}/month</span>
+                <span class="badge">Confidence ${it.confidence}%</span>
+                <span class="badge">Risk ${it.risk}</span>
+              </div>
+            </li>
+          `,
+        )
+        .join("");
+    }
+
+    function renderTables() {
+      document.getElementById("team-table").innerHTML = source.teams
+        .map(
+          (team) => `
+            <tr>
+              <td>${team.name}</td>
+              <td>${fmtMoney(team.spend)}</td>
+              <td>${fmtMoney(team.budget)}</td>
+              <td>${fmtMoney(team.waste)}</td>
+              <td>${team.top}</td>
+            </tr>
+          `,
+        )
+        .join("");
+
+      document.getElementById("model-table").innerHTML = source.models
+        .map(
+          (model) => `
+            <tr>
+              <td>${model.name}</td>
+              <td>${model.provider}</td>
+              <td>${fmtMoney(model.spend)}</td>
+              <td>${model.latency}ms</td>
+              <td>${model.variance}</td>
+              <td style="color:${model.trend < 0 ? "#b14930" : "#237a8a"}">${model.trend > 0 ? "+" : ""}${model.trend}%</td>
+            </tr>
+          `,
+        )
+        .join("");
+    }
+
+    async function syncOverviewFromApi() {
+      try {
+        const res = await fetch("/v1/dashboard/overview", { headers: { accept: "application/json" } });
+        if (!res.ok) {
+          throw new Error(`Overview fetch failed: ${res.status}`);
+        }
+        const payload = await res.json();
+        renderHeroMeta(payload);
+        renderMetrics(payload);
+      } catch {
+        renderHeroMeta({});
+        renderMetrics({});
+      }
+    }
+
+    function init() {
+      renderSpendTrend();
+      renderChain();
+      renderInterventions();
+      renderTables();
+      syncOverviewFromApi();
+    }
+
+    init();
+  </script>
+</body>
+</html>

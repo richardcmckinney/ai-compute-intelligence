@@ -176,6 +176,10 @@ class PlatformConfig(BaseSettings):
     fbp: FBPConfig = Field(default_factory=FBPConfig)
 
     # Infrastructure endpoints.
+    index_max_entries: int = Field(
+        default=250_000,
+        description="Max attribution index entries retained in memory",
+    )
     kafka_bootstrap: str = Field(default="localhost:9092", description="Kafka bootstrap servers")
     redis_url: str = Field(default="redis://localhost:6379/0", description="Redis URL")
     neo4j_uri: str = Field(default="bolt://localhost:7687", description="Neo4j connection URI")

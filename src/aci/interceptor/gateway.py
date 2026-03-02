@@ -20,6 +20,7 @@ request proceeds unmodified to the model provider.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -148,6 +149,15 @@ class FailOpenInterceptor:
             elapsed_ms = (time.monotonic() - start) * 1000
             self.total_fail_open += 1
             self.circuit_breaker.record_failure()
+            workload_id = self._resolve_workload_id(request)
+            shadow_logged = False
+            if workload_id:
+                shadow_logged = self._emit_shadow_event(
+                    EventType.SHADOW_INTERCEPT_TIMEOUT,
+                    workload_id,
+                    request.request_id,
+                    elapsed_ms,
+                )
             logger.error(
                 "interceptor.fail_open.exception",
                 request_id=request.request_id,
@@ -158,7 +168,7 @@ class FailOpenInterceptor:
                 outcome=InterceptionOutcome.FAIL_OPEN,
                 request_id=request.request_id,
                 elapsed_ms=elapsed_ms,
-                shadow_event_logged=True,
+                shadow_event_logged=shadow_logged,
             )
 
     def _intercept_inner(
@@ -179,7 +189,7 @@ class FailOpenInterceptor:
             )
 
         # Step 2: O(1) index lookup. Synchronous hash map access.
-        workload_id = request.workload_id or request.service_name or request.api_key_id
+        workload_id = self._resolve_workload_id(request)
         if not workload_id:
             elapsed_ms = (time.monotonic() - start) * 1000
             return InterceptionResult(
@@ -210,7 +220,7 @@ class FailOpenInterceptor:
                     pass  # No running loop; skip background refresh.
 
             # Emit shadow event for async reconciliation (Section 6.3).
-            self._emit_shadow_event(
+            shadow_logged = self._emit_shadow_event(
                 EventType.SHADOW_INTERCEPT_MISS,
                 workload_id,
                 request.request_id,
@@ -221,14 +231,14 @@ class FailOpenInterceptor:
                 outcome=InterceptionOutcome.FAIL_OPEN,
                 request_id=request.request_id,
                 elapsed_ms=elapsed_ms,
-                shadow_event_logged=True,
+                shadow_event_logged=shadow_logged,
             )
 
         # Step 3: Time budget check.
         elapsed_so_far = (time.monotonic() - start) * 1000
         if self.config.timeout_ms - elapsed_so_far <= 2.0:
             self.total_fail_open += 1
-            self._emit_shadow_event(
+            shadow_logged = self._emit_shadow_event(
                 EventType.SHADOW_INTERCEPT_TIMEOUT,
                 workload_id,
                 request.request_id,
@@ -240,7 +250,7 @@ class FailOpenInterceptor:
                 elapsed_ms=elapsed_so_far,
                 attribution=attribution,
                 enrichment_headers=self._build_basic_headers(request, attribution),
-                shadow_event_logged=True,
+                shadow_event_logged=shadow_logged,
             )
 
         # Step 4: Policy evaluation. O(1) threshold checks.
@@ -257,7 +267,7 @@ class FailOpenInterceptor:
                 elapsed_ms=elapsed_ms,
                 attribution=attribution,
                 policy_results=violations,
-                shadow_event_logged=True,
+                shadow_event_logged=False,
             )
 
         elif self.mode == DeploymentMode.ADVISORY:
@@ -438,7 +448,7 @@ class FailOpenInterceptor:
         workload_id: str,
         request_id: str,
         elapsed_ms: float,
-    ) -> None:
+    ) -> bool:
         """
         Emit a shadow event to the event bus for async reconciliation (Section 6.3).
 
@@ -446,7 +456,7 @@ class FailOpenInterceptor:
         bus is unavailable, the event is dropped and logged.
         """
         if self._event_bus is None:
-            return
+            return True
 
         try:
             event = DomainEvent(
@@ -463,17 +473,35 @@ class FailOpenInterceptor:
                 idempotency_key=f"shadow:{request_id}",
                 tenant_id="",  # Populated by bus middleware in production.
             )
-            # Synchronous publish into in-memory bus. In production Kafka,
-            # this would be a non-blocking produce() call.
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(self._event_bus.publish(event))
-            except RuntimeError:
-                # No running loop; fall back to synchronous path.
-                pass
+            publish_result = self._event_bus.publish(event)
+            if inspect.isawaitable(publish_result):
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(publish_result)
+                except RuntimeError:
+                    asyncio.run(publish_result)
+                return True
+
+            return bool(publish_result)
         except Exception as exc:
             # Shadow event emission must never raise on the hot path.
             logger.debug("interceptor.shadow_event.failed", error=str(exc))
+            return False
+
+    @staticmethod
+    def _resolve_workload_id(request: InterceptionRequest) -> str:
+        """Choose the best identifier available for index lookup."""
+        candidates = (
+            request.workload_id,
+            request.service_name,
+            request.api_key_id,
+            str(request.metadata.get("workload_id", "")),
+        )
+        for candidate in candidates:
+            normalized = candidate.strip()
+            if normalized:
+                return normalized
+        return ""
 
     def get_metrics(self) -> dict:
         return {
