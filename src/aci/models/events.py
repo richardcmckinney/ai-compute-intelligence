@@ -8,12 +8,13 @@ an idempotency_key per source to prevent duplicate processing.
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any
+from typing import Any, ClassVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class EventType(StrEnum):
@@ -82,6 +83,25 @@ class DomainEvent(BaseModel):
 
     model_config = {"frozen": True}
 
+    MAX_ATTRIBUTES_PAYLOAD_BYTES: ClassVar[int] = 512 * 1024
+
+    @field_validator("event_time", "ingest_time")
+    @classmethod
+    def _validate_tz_aware_datetime(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("datetime fields must be timezone-aware")
+        return value
+
+    @field_validator("attributes")
+    @classmethod
+    def _validate_attributes_payload_size(cls, value: dict[str, Any]) -> dict[str, Any]:
+        encoded = json.dumps(value, default=str, separators=(",", ":")).encode("utf-8")
+        if len(encoded) > cls.MAX_ATTRIBUTES_PAYLOAD_BYTES:
+            raise ValueError(
+                f"attributes payload exceeds {cls.MAX_ATTRIBUTES_PAYLOAD_BYTES} bytes"
+            )
+        return value
+
 
 class InferenceEvent(BaseModel):
     """Structured attributes for an inference request/response event."""
@@ -92,8 +112,8 @@ class InferenceEvent(BaseModel):
     region: str = ""
     input_tokens: int = 0
     output_tokens: int = 0
-    latency_ms: float = 0.0
-    cost_usd: float = 0.0
+    latency_ms: float = Field(default=0.0, ge=0.0)
+    cost_usd: float = Field(default=0.0, ge=0.0)
     api_key_id: str = ""
     service_name: str = ""
     request_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -121,8 +141,8 @@ class BillingLineItem(BaseModel):
     service: str
     resource_arn: str = ""
     region: str = ""
-    cost_usd: float
-    usage_quantity: float = 0.0
+    cost_usd: float = Field(ge=0.0)
+    usage_quantity: float = Field(default=0.0, ge=0.0)
     usage_unit: str = ""
     tags: dict[str, str] = Field(default_factory=dict)
     billing_period_start: datetime | None = None

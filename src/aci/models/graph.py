@@ -78,6 +78,24 @@ class GraphNode(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+class EdgeProvenance(BaseModel):
+    """
+    Provenance record for how an edge was derived.
+
+    Every probabilistic edge stores: source system, reconciliation method,
+    and the contributing signals. This supports auditability and the
+    calibration loop (Section 5.2).
+    """
+
+    source: str = Field(description="System that produced this edge (e.g., 'hre', 'manual')")
+    method: str = Field(description="Reconciliation method (R1-R6 or 'deterministic')")
+    signals: list[str] = Field(
+        default_factory=list,
+        description="Contributing signal identifiers",
+    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 class GraphEdge(BaseModel):
     """
     A time-versioned, weighted edge in the attribution graph.
@@ -106,29 +124,41 @@ class GraphEdge(BaseModel):
         default=None,
         description="End of validity window (None = currently valid)",
     )
-    provenance: EdgeProvenance = Field(description="How this edge was derived")
+    provenance: EdgeProvenance = Field(
+        default_factory=lambda: EdgeProvenance(
+            source="system",
+            method="deterministic",
+            signals=[],
+        ),
+        description="How this edge was derived",
+    )
     explanation_ref: str | None = Field(
         default=None,
         description="Reference to explanation artifact for probabilistic edges",
     )
 
-
-class EdgeProvenance(BaseModel):
-    """
-    Provenance record for how an edge was derived.
-
-    Every probabilistic edge stores: source system, reconciliation method,
-    and the contributing signals. This supports auditability and the
-    calibration loop (Section 5.2).
-    """
-
-    source: str = Field(description="System that produced this edge (e.g., 'hre', 'manual')")
-    method: str = Field(description="Reconciliation method (R1-R6 or 'deterministic')")
-    signals: list[str] = Field(
-        default_factory=list,
-        description="Contributing signal identifiers",
-    )
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    @classmethod
+    def deterministic(
+        cls,
+        *,
+        edge_type: EdgeType,
+        from_id: str,
+        to_id: str,
+        valid_from: datetime,
+        confidence: float = 1.0,
+        weight: float = 1.0,
+        source: str = "system",
+    ) -> "GraphEdge":
+        """Convenience constructor for deterministic edge creation."""
+        return cls(
+            edge_type=edge_type,
+            from_id=from_id,
+            to_id=to_id,
+            valid_from=valid_from,
+            confidence=confidence,
+            weight=weight,
+            provenance=EdgeProvenance(source=source, method="deterministic"),
+        )
 
 
 class ConflictState(BaseModel):

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from aci.models.events import DomainEvent, EventType
@@ -104,8 +106,8 @@ EVENT_PAYLOAD_SCHEMAS: dict[EventType, type[BaseModel]] = {
 
 def validate_event_attributes(
     event_type: EventType,
-    attributes: dict,
-) -> dict:
+    attributes: dict[str, Any],
+) -> dict[str, Any]:
     """Validate event attributes against the strict schema for the event type."""
     schema_model = EVENT_PAYLOAD_SCHEMAS.get(event_type)
     if schema_model is None:
@@ -123,4 +125,8 @@ def validate_event_attributes(
 
 def validate_domain_event(event: DomainEvent) -> None:
     """Validate the payload of a fully-formed DomainEvent."""
+    if event.schema_version != 1:
+        raise EventSchemaValidationError(
+            f"Unsupported schema_version={event.schema_version}; expected version=1"
+        )
     validate_event_attributes(event.event_type, event.attributes)

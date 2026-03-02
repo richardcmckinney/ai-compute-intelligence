@@ -8,7 +8,7 @@ from environment variables or a configuration service.
 
 from __future__ import annotations
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -84,6 +84,12 @@ class ConfidenceConfig(BaseSettings):
     # Temporal decay (Section 7).
     decay_window_days: int = Field(default=90, description="Recency window for decay")
     decay_rate: float = Field(default=0.01, description="Daily decay factor")
+
+    @model_validator(mode="after")
+    def _validate_threshold_ordering(self) -> "ConfidenceConfig":
+        if self.chargeback_threshold <= self.provisional_threshold:
+            raise ValueError("chargeback_threshold must be greater than provisional_threshold")
+        return self
 
 
 class TRACConfig(BaseSettings):
@@ -164,10 +170,10 @@ class FBPConfig(BaseSettings):
     min_cohort_size: int = Field(default=5, description="Min orgs per cohort")
 
     # Noise mechanism selection.
-    # False (default): continuous Laplace via numpy. Sufficient for protocol testing.
-    # True: discrete geometric Laplace via secrets CSPRNG. Required before any
-    # real organizational data flows through the protocol. See Mironov 2012.
-    use_secure_noise: bool = Field(default=False, description="Use discrete Laplace (production)")
+    # True (default): discrete geometric Laplace via secrets CSPRNG.
+    # Required before any real organizational data flows through the protocol.
+    # False: continuous Laplace via numpy for local protocol testing only.
+    use_secure_noise: bool = Field(default=True, description="Use discrete Laplace (production)")
 
     # Max membership churn for cohort publication.
     max_churn_rate: float = Field(default=0.20, description="Max month-over-month churn")
@@ -228,3 +234,42 @@ class PlatformConfig(BaseSettings):
     neo4j_uri: str = Field(default="bolt://localhost:7687", description="Neo4j connection URI")
     neo4j_user: str = Field(default="neo4j")
     neo4j_password: str = Field(default="", description="Neo4j password")
+
+    @model_validator(mode="after")
+    def _validate_runtime_settings(self) -> "PlatformConfig":
+        valid_roles = {"all", "gateway", "processor"}
+        if self.runtime_role not in valid_roles:
+            raise ValueError(f"runtime_role must be one of {sorted(valid_roles)}")
+
+        valid_bus_backends = {"memory", "kafka"}
+        if self.event_bus_backend not in valid_bus_backends:
+            raise ValueError(f"event_bus_backend must be one of {sorted(valid_bus_backends)}")
+
+        valid_index_backends = {"memory", "redis"}
+        if self.index_backend not in valid_index_backends:
+            raise ValueError(f"index_backend must be one of {sorted(valid_index_backends)}")
+
+        valid_circuit_backends = {"local", "redis"}
+        if self.interceptor.circuit_state_backend not in valid_circuit_backends:
+            raise ValueError(
+                "interceptor.circuit_state_backend must be one of "
+                f"{sorted(valid_circuit_backends)}"
+            )
+
+        production_like = self.environment.lower() in {"production", "staging"}
+        if production_like and not self.neo4j_password:
+            raise ValueError("neo4j_password must be configured in production/staging")
+
+        if self.event_bus_backend == "kafka" and not self.kafka_bootstrap:
+            raise ValueError("kafka_bootstrap must be configured when event_bus_backend='kafka'")
+
+        if (
+            self.index_backend == "redis"
+            or self.interceptor.circuit_state_backend == "redis"
+            or self.event_bus_backend == "kafka"
+        ) and not self.redis_url:
+            raise ValueError(
+                "redis_url must be configured for redis index/circuit state or kafka dedup backend"
+            )
+
+        return self

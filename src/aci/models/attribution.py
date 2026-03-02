@@ -138,3 +138,7 @@ class ExplanationArtifact(BaseModel):
     )
     conflict_state: str | None = None
     generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+# Ensure forward references are resolved deterministically for runtime validators.
+AttributionResult.model_rebuild()

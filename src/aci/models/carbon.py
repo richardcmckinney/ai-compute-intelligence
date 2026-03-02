@@ -6,8 +6,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import StrEnum
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -74,6 +75,16 @@ class CarbonCalculationReceipt(BaseModel):
     )
 
     model_config = {"frozen": True}
+
+    @field_validator("uncertainty_band_pct")
+    @classmethod
+    def _validate_uncertainty_band(cls, value: tuple[float, float]) -> tuple[float, float]:
+        low, high = value
+        if low < 0.0 or high < 0.0:
+            raise ValueError("uncertainty band values must be non-negative")
+        if low > high:
+            raise ValueError("uncertainty band lower bound must be <= upper bound")
+        return value
 
 
 class CarbonLedgerEntry(BaseModel):
@@ -157,7 +168,7 @@ class PolicyDefinition(BaseModel):
     name: str
     scope: str = Field(description="Scope expression: team, cloud, global, etc.")
     enforcement: EnforcementAction = Field(default=EnforcementAction.SOFT_STOP)
-    parameters: dict = Field(default_factory=dict)
+    parameters: dict[str, Any] = Field(default_factory=dict)
     enabled: bool = True
     requires_opt_in: bool = Field(
         default=False,
@@ -211,3 +222,16 @@ class EquivalenceVerification(BaseModel):
 
     # Fail-safe: if verification fails or is inconclusive, route to original.
     fail_safe_triggered: bool = False
+
+    @field_validator("confidence_interval")
+    @classmethod
+    def _validate_confidence_interval(
+        cls,
+        value: tuple[float, float] | None,
+    ) -> tuple[float, float] | None:
+        if value is None:
+            return value
+        low, high = value
+        if low > high:
+            raise ValueError("confidence interval lower bound must be <= upper bound")
+        return value
