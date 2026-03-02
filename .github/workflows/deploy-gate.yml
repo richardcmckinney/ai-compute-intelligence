@@ -1,0 +1,67 @@
+name: Deployment Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: "Target deployment environment"
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-gate-${{ github.ref }}-${{ inputs.target_environment }}
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Run fast test gate
+        run: pytest tests/unit/ -q
+
+  deployment-gate:
+    runs-on: ubuntu-latest
+    needs: preflight
+    environment: ${{ inputs.target_environment }}
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t aci-platform:${{ github.sha }} .
+
+      - name: Smoke test image
+        run: |
+          docker run -d --name aci-smoke -p 8000:8000 aci-platform:${{ github.sha }}
+          sleep 8
+          curl --retry 5 --retry-delay 2 --fail http://localhost:8000/health
+          docker stop aci-smoke
+
+      - name: Record deployment gate result
+        run: |
+          echo "Deployment gate passed for environment: ${{ inputs.target_environment }}"
