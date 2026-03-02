@@ -19,8 +19,12 @@
 - Circuit breaker prevents cascading failures.
 
 ## Recent Hardening
+- Strict schema validation before bus ingestion (reject malformed event payloads).
+- Kafka durable bus mode with DLQ routing and consumer lag telemetry.
+- Redis-backed idempotency dedup for durable at-least-once handling.
 - Bounded LRU index store with eviction metrics.
+- Redis durable fallback on index misses to avoid value-loss during LRU eviction.
+- Redis-backed shared circuit breaker state for cross-replica consistency.
 - Graph adjacency and active-edge indexing.
-- Event bus async handler support and bounded dedup memory.
+- HRE execution bounds (time budget, cluster caps, bounded history window, short-lived cache).
 - Deployment-gate workflow with environment binding.
-

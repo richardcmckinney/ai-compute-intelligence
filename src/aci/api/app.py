@@ -21,12 +21,19 @@ from pydantic import BaseModel, Field
 
 from aci.config import PlatformConfig
 from aci.confidence.calibration import CalibrationEngine
-from aci.core.event_bus import InMemoryEventBus
+from aci.core.event_bus import (
+    InMemoryEventBus,
+    InMemoryIdempotencyStore,
+    KafkaEventBus,
+    RedisIdempotencyStore,
+)
+from aci.core.event_schema import EventSchemaValidationError, validate_event_attributes
 from aci.core.processor import AttributionProcessor
 from aci.equivalence.verifier import EquivalenceVerifier
 from aci.graph.store import GraphStore
 from aci.hre.engine import HeuristicReconciliationEngine
 from aci.index.materializer import AttributionIndexStore, IndexMaterializer
+from aci.interceptor.circuit_breaker import RedisCircuitStateStore
 from aci.interceptor.gateway import (
     DeploymentMode,
     FailOpenInterceptor,
@@ -49,10 +56,17 @@ class AppState:
 
     def __init__(self) -> None:
         self.config = PlatformConfig()
-        self.event_bus = InMemoryEventBus()
+        self.runtime_role = self.config.runtime_role.lower()
+        self.accepts_ingestion = self.runtime_role in {"all", "processor"}
+        self.accepts_interception = self.runtime_role in {"all", "gateway"}
+        self.event_bus = self._build_event_bus()
         self.graph = GraphStore()
 
-        self.index_store = AttributionIndexStore(max_entries=self.config.index_max_entries)
+        self.index_store = AttributionIndexStore(
+            max_entries=self.config.index_max_entries,
+            redis_url=self.config.redis_url if self.config.index_backend == "redis" else None,
+            redis_prefix=self.config.index_redis_prefix,
+        )
         self.materializer = IndexMaterializer(self.index_store, self.config)
         self.hre = HeuristicReconciliationEngine()
         self.calibration = CalibrationEngine(self.config.confidence)
@@ -70,12 +84,46 @@ class AppState:
             policy_engine=self.policy_engine,
         )
 
+        circuit_state_store = None
+        if self.config.interceptor.circuit_state_backend == "redis":
+            circuit_state_store = RedisCircuitStateStore(
+                redis_url=self.config.redis_url,
+                key=self.config.interceptor.circuit_state_redis_key,
+            )
+
         self.interceptor = FailOpenInterceptor(
             self.index_store,
             self.config.interceptor,
             mode=DeploymentMode.ADVISORY,
             event_bus=self.event_bus,
+            circuit_state_store=circuit_state_store,
         )
+
+    def _build_event_bus(self) -> InMemoryEventBus | KafkaEventBus:
+        backend = self.config.event_bus_backend.lower()
+        if backend == "kafka":
+            if self.config.redis_url:
+                idempotency_store = RedisIdempotencyStore(
+                    redis_url=self.config.redis_url,
+                    ttl_seconds=self.config.event_bus_dedup_ttl_s,
+                )
+            else:
+                idempotency_store = InMemoryIdempotencyStore(max_keys=2_000_000)
+            return KafkaEventBus(
+                bootstrap_servers=self.config.kafka_bootstrap,
+                topic=self.config.event_bus_topic,
+                dlq_topic=self.config.event_bus_dlq_topic,
+                consumer_group=self.config.event_bus_consumer_group,
+                idempotency_store=idempotency_store,
+            )
+
+        return InMemoryEventBus()
+
+    async def start(self) -> None:
+        await self.event_bus.start()
+
+    async def stop(self) -> None:
+        await self.event_bus.stop()
 
 
 state = AppState()
@@ -85,7 +133,9 @@ state = AppState()
 async def lifespan(app: FastAPI):
     """Application lifespan: initialize and tear down platform components."""
     logger.info("platform.starting", tenant=state.config.tenant_id)
+    await state.start()
     yield
+    await state.stop()
     logger.info("platform.shutting_down")
 
 
@@ -117,6 +167,7 @@ class HealthResponse(BaseModel):
     status: str
     timestamp: str
     index_size: int
+    runtime_role: str
     interceptor_mode: str
     circuit_breaker: str
 
@@ -197,6 +248,7 @@ class EventBatchIngestResponse(BaseModel):
 class DashboardOverviewResponse(BaseModel):
     tenant_id: str
     environment: str
+    runtime_role: str
     generated_at: str
     index_size: int
     index_hit_rate: float
@@ -232,6 +284,7 @@ async def health() -> HealthResponse:
         status="healthy",
         timestamp=datetime.now(UTC).isoformat(),
         index_size=state.index_store.size,
+        runtime_role=state.runtime_role,
         interceptor_mode=state.interceptor.mode.value,
         circuit_breaker=state.interceptor.circuit_breaker.state,
     )
@@ -251,10 +304,18 @@ async def metrics() -> dict[str, dict[str, Any]]:
 @app.post("/v1/events/ingest", response_model=EventIngestResponse)
 async def ingest_event(req: EventIngestRequest) -> EventIngestResponse:
     """Ingest a single domain event into the append-only bus."""
+    if not state.accepts_ingestion:
+        raise HTTPException(status_code=503, detail="event ingestion disabled for this runtime role")
+
+    try:
+        attributes = validate_event_attributes(req.event_type, req.attributes)
+    except EventSchemaValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     event = DomainEvent(
         event_type=req.event_type,
         subject_id=req.subject_id,
-        attributes=req.attributes,
+        attributes=attributes,
         event_time=req.event_time,
         source=req.source,
         idempotency_key=req.idempotency_key,
@@ -267,18 +328,27 @@ async def ingest_event(req: EventIngestRequest) -> EventIngestResponse:
 @app.post("/v1/events/ingest/batch", response_model=EventBatchIngestResponse)
 async def ingest_events_batch(req: EventBatchIngestRequest) -> EventBatchIngestResponse:
     """Ingest a batch of domain events with idempotency-aware accounting."""
-    events = [
-        DomainEvent(
-            event_type=e.event_type,
-            subject_id=e.subject_id,
-            attributes=e.attributes,
-            event_time=e.event_time,
-            source=e.source,
-            idempotency_key=e.idempotency_key,
-            tenant_id=state.config.tenant_id,
+    if not state.accepts_ingestion:
+        raise HTTPException(status_code=503, detail="event ingestion disabled for this runtime role")
+
+    events: list[DomainEvent] = []
+    for e in req.events:
+        try:
+            attrs = validate_event_attributes(e.event_type, e.attributes)
+        except EventSchemaValidationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        events.append(
+            DomainEvent(
+                event_type=e.event_type,
+                subject_id=e.subject_id,
+                attributes=attrs,
+                event_time=e.event_time,
+                source=e.source,
+                idempotency_key=e.idempotency_key,
+                tenant_id=state.config.tenant_id,
+            )
         )
-        for e in req.events
-    ]
     result = await state.event_bus.publish_batch(events)
     return EventBatchIngestResponse(
         total=len(events),
@@ -297,6 +367,9 @@ async def intercept(req: InterceptRequest) -> InterceptResponse:
     framework level, catching event-loop contention that the internal timer
     cannot detect. On timeout, the request proceeds unmodified (fail-open).
     """
+    if not state.accepts_interception:
+        raise HTTPException(status_code=503, detail="interceptor disabled for this runtime role")
+
     interception_req = InterceptionRequest(
         request_id=req.request_id,
         model=req.model,
@@ -394,6 +467,7 @@ async def dashboard_overview() -> DashboardOverviewResponse:
     return DashboardOverviewResponse(
         tenant_id=state.config.tenant_id,
         environment=state.config.environment,
+        runtime_role=state.runtime_role,
         generated_at=datetime.now(UTC).isoformat(),
         index_size=index_stats_payload.get("size", 0),
         index_hit_rate=index_stats_payload.get("hit_rate", 0.0),

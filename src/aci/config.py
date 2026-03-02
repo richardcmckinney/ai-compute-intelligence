@@ -30,9 +30,24 @@ class InterceptorConfig(BaseSettings):
     # Circuit breaker: seconds before attempting half-open.
     circuit_breaker_reset_s: float = Field(default=30.0, description="Seconds before half-open")
 
+    # Circuit breaker state backend.
+    # local: per-process memory (development/testing)
+    # redis: shared state across horizontally scaled pods
+    circuit_state_backend: str = Field(
+        default="local",
+        description="Circuit breaker state backend (local|redis)",
+    )
+    circuit_state_redis_key: str = Field(
+        default="aci:circuit:interceptor",
+        description="Redis key for shared circuit breaker state",
+    )
+
     # Shadow warming: probability of triggering background refresh on cache miss.
     # Prevents thundering herd (Section 6.3).
     shadow_warm_probability: float = Field(default=0.01, description="P(trigger refresh)")
+
+    # Emit shadow events to the event bus on miss/timeout.
+    shadow_events_enabled: bool = Field(default=True)
 
     # Stale-while-revalidate: serve last known entry during refresh.
     stale_while_revalidate: bool = Field(default=True)
@@ -166,6 +181,10 @@ class PlatformConfig(BaseSettings):
     # Deployment identification.
     tenant_id: str = Field(default="default", description="Customer tenant identifier")
     environment: str = Field(default="development", description="Deployment environment")
+    runtime_role: str = Field(
+        default="all",
+        description="Runtime role (all|gateway|processor)",
+    )
 
     # Subsystem configs.
     interceptor: InterceptorConfig = Field(default_factory=InterceptorConfig)
@@ -180,6 +199,30 @@ class PlatformConfig(BaseSettings):
         default=250_000,
         description="Max attribution index entries retained in memory",
     )
+    index_backend: str = Field(
+        default="memory",
+        description="Attribution index backend (memory|redis)",
+    )
+    index_redis_prefix: str = Field(
+        default="aci:index",
+        description="Redis key prefix for durable index entries",
+    )
+
+    event_bus_backend: str = Field(
+        default="memory",
+        description="Event bus backend (memory|kafka)",
+    )
+    event_bus_topic: str = Field(default="aci.events", description="Primary event topic")
+    event_bus_dlq_topic: str = Field(default="aci.events.dlq", description="Dead-letter topic")
+    event_bus_consumer_group: str = Field(
+        default="aci-processor",
+        description="Consumer group for processor subscribers",
+    )
+    event_bus_dedup_ttl_s: int = Field(
+        default=86_400,
+        description="Idempotency dedup retention (seconds) for durable bus backends",
+    )
+
     kafka_bootstrap: str = Field(default="localhost:9092", description="Kafka bootstrap servers")
     redis_url: str = Field(default="redis://localhost:6379/0", description="Redis URL")
     neo4j_uri: str = Field(default="bolt://localhost:7687", description="Neo4j connection URI")

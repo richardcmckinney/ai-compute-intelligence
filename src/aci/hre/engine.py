@@ -11,6 +11,9 @@ When R1 fails, R2-R6 are attempted and combined via noisy-OR.
 
 from __future__ import annotations
 
+import time
+from collections import OrderedDict
+from dataclasses import dataclass
 from datetime import datetime
 
 import structlog
@@ -33,6 +36,17 @@ from aci.models.attribution import (
 )
 
 logger = structlog.get_logger()
+
+
+@dataclass
+class HREExecutionConfig:
+    """Execution-time safeguards for production reconciliation throughput."""
+
+    max_resolve_ms: float = 25.0
+    max_cluster_targets: int = 25
+    max_historical_signals: int = 500
+    cache_ttl_seconds: float = 30.0
+    cache_max_entries: int = 10_000
 
 
 class ReconciliationContext:
@@ -80,6 +94,7 @@ class HeuristicReconciliationEngine:
     def __init__(
         self,
         combination_config: CombinationConfig | None = None,
+        execution_config: HREExecutionConfig | None = None,
     ) -> None:
         self.r1 = R1DirectMatch()
         self.r2 = R2TemporalCorrelation()
@@ -88,6 +103,8 @@ class HeuristicReconciliationEngine:
         self.r5 = R5ServiceAccountResolution()
         self.r6 = R6ProportionalAllocation()
         self.combination_config = combination_config or CombinationConfig()
+        self.execution_config = execution_config or HREExecutionConfig()
+        self._cache: OrderedDict[str, tuple[float, AttributionResult]] = OrderedDict()
 
     def resolve(
         self,
@@ -106,6 +123,12 @@ class HeuristicReconciliationEngine:
         4. If combined confidence is too low, fall back to R6.
         5. Produce an AttributionResult with explanation artifact.
         """
+        started = time.monotonic()
+        cache_key = f"{entity_type}:{entity_id}"
+        cached = self._get_cached(cache_key)
+        if cached is not None:
+            return cached
+
         logger.info(
             "hre.resolve.start",
             entity_id=entity_id,
@@ -116,12 +139,14 @@ class HeuristicReconciliationEngine:
         r1_signal = self.r1.resolve(entity_id, context.identity_mappings)
         if r1_signal is not None and r1_signal.confidence >= 0.98:
             logger.info("hre.resolve.r1_match", target=r1_signal.target_entity)
-            return self._build_result(
+            result = self._build_result(
                 entity_id=entity_id,
                 primary_signal=r1_signal,
                 all_signals=[r1_signal],
                 combined_confidence=r1_signal.confidence,
             )
+            self._cache_result(cache_key, result)
+            return result
 
         # Step 2: Collect probabilistic signals (R2-R5).
         probabilistic_signals: list[ReconciliationSignal] = []
@@ -138,7 +163,8 @@ class HeuristicReconciliationEngine:
         if r3_signal is not None:
             probabilistic_signals.append(r3_signal)
 
-        r4_signal = self.r4.resolve(entity_id, context.historical_attributions)
+        historical = context.historical_attributions[-self.execution_config.max_historical_signals :]
+        r4_signal = self.r4.resolve(entity_id, historical)
         if r4_signal is not None:
             probabilistic_signals.append(r4_signal)
 
@@ -153,15 +179,29 @@ class HeuristicReconciliationEngine:
 
         # Step 3: Combine signals if we have any.
         if probabilistic_signals:
+            if self._exceeded_budget(started):
+                result = self._timeboxed_fallback(entity_id, probabilistic_signals)
+                self._cache_result(cache_key, result)
+                return result
+
             # Group signals by target entity. Different methods may point
             # to different targets; we need to pick the best cluster.
             target_signals = self._cluster_by_target(probabilistic_signals)
+            if len(target_signals) > self.execution_config.max_cluster_targets:
+                ranked = sorted(
+                    target_signals.items(),
+                    key=lambda item: max(signal.confidence for signal in item[1]),
+                    reverse=True,
+                )[: self.execution_config.max_cluster_targets]
+                target_signals = dict(ranked)
 
             best_target: str | None = None
             best_confidence = 0.0
             best_cluster: list[ReconciliationSignal] = []
 
             for target, cluster in target_signals.items():
+                if self._exceeded_budget(started):
+                    break
                 combination_input = [(s.method, s.confidence) for s in cluster]
                 result = combine_evidence(combination_input, self.combination_config)
 
@@ -177,13 +217,15 @@ class HeuristicReconciliationEngine:
                     confidence=best_confidence,
                     methods=[s.method for s in best_cluster],
                 )
-                return self._build_result(
+                result = self._build_result(
                     entity_id=entity_id,
                     primary_signal=best_cluster[0],
                     all_signals=best_cluster,
                     combined_confidence=best_confidence,
                     alternatives=self._build_alternatives(target_signals, best_target),
                 )
+                self._cache_result(cache_key, result)
+                return result
 
         # Step 4: Fallback to R6 (proportional allocation).
         r6_signals = self.r6.resolve(entity_id, context.proportional_users)
@@ -196,7 +238,7 @@ class HeuristicReconciliationEngine:
                 confidence=best_r6.confidence,
                 teams=len(r6_signals),
             )
-            return self._build_result(
+            result = self._build_result(
                 entity_id=entity_id,
                 primary_signal=best_r6,
                 all_signals=r6_signals,
@@ -212,10 +254,12 @@ class HeuristicReconciliationEngine:
                     for s in r6_signals
                 ],
             )
+            self._cache_result(cache_key, result)
+            return result
 
         # Step 5: No resolution possible.
         logger.warning("hre.resolve.failed", entity_id=entity_id)
-        return AttributionResult(
+        result = AttributionResult(
             workload_id=entity_id,
             attribution_path=[],
             combined_confidence=0.0,
@@ -227,6 +271,44 @@ class HeuristicReconciliationEngine:
                 alternatives_considered=[],
             ),
         )
+        self._cache_result(cache_key, result)
+        return result
+
+    def _timeboxed_fallback(
+        self,
+        entity_id: str,
+        signals: list[ReconciliationSignal],
+    ) -> AttributionResult:
+        """Fail-safe reconciliation result when execution budget is exceeded."""
+        best = max(signals, key=lambda s: s.confidence)
+        return self._build_result(
+            entity_id=entity_id,
+            primary_signal=best,
+            all_signals=[best],
+            combined_confidence=best.confidence * 0.9,
+            alternatives=[],
+        )
+
+    def _exceeded_budget(self, started: float) -> bool:
+        elapsed_ms = (time.monotonic() - started) * 1000
+        return elapsed_ms > self.execution_config.max_resolve_ms
+
+    def _get_cached(self, key: str) -> AttributionResult | None:
+        item = self._cache.get(key)
+        if item is None:
+            return None
+        cached_at, result = item
+        if (time.monotonic() - cached_at) > self.execution_config.cache_ttl_seconds:
+            self._cache.pop(key, None)
+            return None
+        self._cache.move_to_end(key)
+        return result
+
+    def _cache_result(self, key: str, result: AttributionResult) -> None:
+        self._cache[key] = (time.monotonic(), result)
+        self._cache.move_to_end(key)
+        while len(self._cache) > self.execution_config.cache_max_entries:
+            self._cache.popitem(last=False)
 
     @staticmethod
     def _cluster_by_target(

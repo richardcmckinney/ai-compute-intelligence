@@ -12,11 +12,14 @@ Old entries are not overwritten; they are superseded with version metadata.
 
 from __future__ import annotations
 
+import json
 from collections import OrderedDict
 from datetime import UTC, datetime
 from threading import RLock
 
 import structlog
+from redis import Redis
+from redis.exceptions import RedisError
 
 from aci.config import PlatformConfig
 from aci.models.attribution import AttributionIndexEntry, AttributionResult
@@ -32,7 +35,12 @@ class AttributionIndexStore:
     The interceptor reads ONLY from this store; never from the graph.
     """
 
-    def __init__(self, max_entries: int = 250_000) -> None:
+    def __init__(
+        self,
+        max_entries: int = 250_000,
+        redis_url: str | None = None,
+        redis_prefix: str = "aci:index",
+    ) -> None:
         # Primary index: workload_id -> AttributionIndexEntry.
         self._index: OrderedDict[str, AttributionIndexEntry] = OrderedDict()
 
@@ -45,9 +53,26 @@ class AttributionIndexStore:
         self._miss_count: int = 0
         self._materialization_count: int = 0
         self._eviction_count: int = 0
+        self._durable_hits: int = 0
+        self._durable_misses: int = 0
+        self._durable_writes: int = 0
+        self._durable_errors: int = 0
 
         # Single-process synchronization for mixed async/sync callers.
         self._lock = RLock()
+
+        self._redis_prefix = redis_prefix
+        self._redis: Redis | None = None
+        if redis_url:
+            try:
+                self._redis = Redis.from_url(
+                    redis_url,
+                    decode_responses=True,
+                    socket_timeout=0.01,
+                    socket_connect_timeout=0.01,
+                )
+            except Exception as exc:
+                logger.warning("index.redis_unavailable", error=str(exc))
 
     def lookup(self, workload_id: str) -> AttributionIndexEntry | None:
         """
@@ -62,9 +87,22 @@ class AttributionIndexStore:
                 self._hit_count += 1
                 # LRU bump: recently read entries stay hot in memory.
                 self._index.move_to_end(workload_id)
-            else:
-                self._miss_count += 1
-            return entry
+                return entry
+
+            self._miss_count += 1
+
+        # Durable fallback: load evicted entries from Redis in production.
+        if self._redis is None:
+            return None
+
+        durable_entry = self._load_durable_entry(workload_id)
+        if durable_entry is None:
+            return None
+
+        with self._lock:
+            self._durable_hits += 1
+            self._insert_local_locked(durable_entry)
+        return durable_entry
 
     def lookup_batch(self, workload_ids: list[str]) -> dict[str, AttributionIndexEntry | None]:
         """Batch lookup for multiple workload IDs."""
@@ -94,6 +132,11 @@ class AttributionIndexStore:
                 "hit_rate": round(hit_rate, 4),
                 "materializations": self._materialization_count,
                 "evictions": self._eviction_count,
+                "durable_backend_enabled": self._redis is not None,
+                "durable_hits": self._durable_hits,
+                "durable_misses": self._durable_misses,
+                "durable_writes": self._durable_writes,
+                "durable_errors": self._durable_errors,
             }
 
     def materialize(self, entry: AttributionIndexEntry) -> None:
@@ -114,16 +157,11 @@ class AttributionIndexStore:
                 }
             )
 
-            self._index[entry.workload_id] = entry_with_version
-            self._index.move_to_end(entry.workload_id)
-            self._versions[entry.workload_id] = new_version
+            self._insert_local_locked(entry_with_version)
             self._materialization_count += 1
+            self._versions[entry.workload_id] = new_version
 
-            # Enforce bounded memory usage via LRU eviction.
-            while len(self._index) > self._max_entries:
-                evicted_workload_id, _ = self._index.popitem(last=False)
-                self._versions.pop(evicted_workload_id, None)
-                self._eviction_count += 1
+        self._write_durable_entry(entry_with_version)
 
         logger.debug(
             "index.materialized",
@@ -134,18 +172,67 @@ class AttributionIndexStore:
 
     def evict(self, workload_id: str) -> bool:
         """Remove an entry from the index (e.g., resource deleted)."""
+        removed = False
         with self._lock:
             if workload_id in self._index:
                 del self._index[workload_id]
                 self._versions.pop(workload_id, None)
-                return True
-            return False
+                removed = True
+
+        if self._redis is not None:
+            try:
+                self._redis.delete(self._redis_key(workload_id))
+            except RedisError:
+                with self._lock:
+                    self._durable_errors += 1
+
+        return removed
 
     def clear(self) -> None:
         """Full index clear for rebuild."""
         with self._lock:
             self._index.clear()
             self._versions.clear()
+
+    def _insert_local_locked(self, entry: AttributionIndexEntry) -> None:
+        self._index[entry.workload_id] = entry
+        self._index.move_to_end(entry.workload_id)
+        self._versions[entry.workload_id] = entry.version
+
+        while len(self._index) > self._max_entries:
+            evicted_workload_id, _ = self._index.popitem(last=False)
+            self._versions.pop(evicted_workload_id, None)
+            self._eviction_count += 1
+
+    def _redis_key(self, workload_id: str) -> str:
+        return f"{self._redis_prefix}:{workload_id}"
+
+    def _load_durable_entry(self, workload_id: str) -> AttributionIndexEntry | None:
+        if self._redis is None:
+            return None
+        try:
+            raw = self._redis.get(self._redis_key(workload_id))
+            if raw is None:
+                with self._lock:
+                    self._durable_misses += 1
+                return None
+            return AttributionIndexEntry.model_validate_json(raw)
+        except (RedisError, ValueError):
+            with self._lock:
+                self._durable_errors += 1
+            return None
+
+    def _write_durable_entry(self, entry: AttributionIndexEntry) -> None:
+        if self._redis is None:
+            return
+        try:
+            payload = json.dumps(entry.model_dump(mode="json"))
+            self._redis.set(self._redis_key(entry.workload_id), payload)
+            with self._lock:
+                self._durable_writes += 1
+        except RedisError:
+            with self._lock:
+                self._durable_errors += 1
 
 
 class IndexMaterializer:

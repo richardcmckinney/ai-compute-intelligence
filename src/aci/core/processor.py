@@ -16,7 +16,7 @@ from datetime import datetime
 import structlog
 
 from aci.confidence.calibration import CalibrationEngine
-from aci.core.event_bus import InMemoryEventBus
+from aci.core.event_bus import InMemoryEventBus, KafkaEventBus
 from aci.graph.store import GraphStore
 from aci.hre.engine import HeuristicReconciliationEngine, ReconciliationContext
 from aci.index.materializer import IndexMaterializer
@@ -46,7 +46,7 @@ class AttributionProcessor:
 
     def __init__(
         self,
-        event_bus: InMemoryEventBus,
+        event_bus: InMemoryEventBus | KafkaEventBus,
         graph_store: GraphStore,
         hre: HeuristicReconciliationEngine,
         calibration: CalibrationEngine,

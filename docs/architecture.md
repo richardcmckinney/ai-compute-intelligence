@@ -25,6 +25,9 @@ OTel-native passive ingestion from existing log pipelines (CloudWatch, Datadog,
 cloud billing APIs). No bespoke host-level agents. Integration contract defines
 minimum required fields, optional enrichment, and fallback behavior.
 
+Before acceptance into the bus, events are validated against strict per-type schemas.
+Malformed payloads are rejected at ingest-time (HTTP 422) and never enter replay history.
+
 Connectors: AWS CUR, CloudTrail, Bedrock Telemetry, GitHub Webhooks, Workday HRIS.
 
 ### Phase 2: Reconciliation (HRE)
@@ -42,6 +45,12 @@ disconnected enterprise systems. Six methods with calibrated confidence:
 
 Multiple signals are combined via modified noisy-OR with dependency penalties.
 Combined confidence is capped at 0.95.
+
+Execution safeguards:
+- Time-bounded reconciliation with fallback result generation.
+- Target-cluster fanout caps to prevent pathological combinatorics.
+- Bounded historical sample windows.
+- Short-lived result caching for bursty repeated entities.
 
 ### Phase 3: Attribution
 Graph traversal from workload through the six-layer attribution chain:
@@ -71,6 +80,11 @@ can be rebuilt deterministically from the event log. This enables:
 - Version replay when attribution logic is updated
 - Audit trail reconstruction for compliance
 
+Operational hardening:
+- Redis-backed idempotency keys (TTL) for dedup durability.
+- Dead-letter topic for poison events or handler failures.
+- Consumer lag metrics exported for replay and processing SLO monitoring.
+
 ## Confidence Governance
 
 Empirical calibration via isotonic regression, per reconciliation method.
@@ -99,3 +113,5 @@ and confidence risk premium.
 - OPA-based policy enforcement
 - Non-root container execution
 - No secrets in images; injected at runtime
+- Segmented gateway/processor deployments with default-deny network policies
+- Gateway egress restricted to DNS + read-only attribution index path (Redis)

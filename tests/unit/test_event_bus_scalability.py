@@ -14,7 +14,11 @@ def make_event(event_id: str, key: str) -> DomainEvent:
         event_id=event_id,
         event_type=EventType.INFERENCE_REQUEST,
         subject_id=f"subject-{event_id}",
-        attributes={"request_id": event_id},
+        attributes={
+            "request_id": event_id,
+            "model": "gpt-4o-mini",
+            "provider": "openai",
+        },
         event_time=datetime.now(timezone.utc),
         source="unit-test",
         idempotency_key=key,

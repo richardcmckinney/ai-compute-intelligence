@@ -4,6 +4,9 @@
 - Customer telemetry and operational data stay in customer boundary.
 - Read-only integrations by default.
 - No hard dependency of application availability on platform availability.
+- Kubernetes default-deny network policies enforced.
+- Gateway pod egress restricted to DNS and attribution index only.
+- Kafka and Neo4j reachable only by processor pods.
 
 ## Repository Controls
 - CodeQL static analysis.
@@ -22,4 +25,3 @@ Security posture is intentionally conservative:
 - predictable CI controls,
 - documented incident intake path,
 - clear trust-boundary narrative for enterprise buyers.
-

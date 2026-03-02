@@ -304,7 +304,7 @@ class TestEventSourcingReplay:
         event = DomainEvent(
             event_type=EventType.INFERENCE_REQUEST,
             subject_id="req-1",
-            attributes={"model": "gpt-4o"},
+            attributes={"model": "gpt-4o", "provider": "openai"},
             event_time=NOW,
             source="test",
             idempotency_key="test:req-1",
@@ -326,7 +326,12 @@ class TestEventSourcingReplay:
             event = DomainEvent(
                 event_type=EventType.BILLING_LINE_ITEM,
                 subject_id=f"item-{i}",
-                attributes={"cost": i * 10.0},
+                attributes={
+                    "cloud_provider": "aws",
+                    "account_id": "111111111111",
+                    "service": "bedrock",
+                    "cost_usd": i * 10.0,
+                },
                 event_time=NOW - timedelta(hours=5 - i),
                 source="test",
                 idempotency_key=f"test:item-{i}",

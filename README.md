@@ -23,10 +23,12 @@ Phase 6: Reporting      Dashboards, compliance exports, federated benchmarks
 
 ### Runtime Upgrades (v0.2)
 
-- `InMemoryEventBus` now supports mixed sync/async handlers, bounded idempotency-key memory, and batch publish accounting.
+- Event ingestion now enforces strict per-event payload schemas before events are accepted by the bus.
+- Production event bus now supports durable Kafka transport with dead-letter topic routing and consumer lag metrics.
+- Idempotency deduplication now supports Redis-backed TTL storage for production durability.
 - `GraphStore` now maintains adjacency indexes and active-edge indexes to avoid full edge-list scans as graph size grows.
-- `AttributionIndexStore` now uses bounded LRU retention with eviction metrics to prevent unbounded memory growth.
-- `CircuitBreaker` half-open behavior now enforces explicit probe limits before reopening/closing.
+- `AttributionIndexStore` now supports Redis durable fallback so LRU eviction does not permanently lose active attributions.
+- `CircuitBreaker` now supports Redis-backed shared state to keep fail-open behavior consistent across replicas.
 - `FailOpenInterceptor` now resolves workload IDs more robustly and hardens shadow-event emission behavior.
 
 ### Core Innovations
@@ -110,6 +112,10 @@ Before any graph construction or dashboard development, the interceptor hypothes
 
 **If any criterion fails:** redesign, pivot to dashboard-only, or narrow scope.
 
+Production note: these constraints are Phase 0 validation targets, not hard production limits.
+Production deployment should right-size memory and latency budgets based on measured p99s under real
+workload mixes.
+
 Run Phase 0 tests:
 
 ```bash
@@ -161,13 +167,15 @@ http://localhost:8000/platform/
 
 **Fail-open by design.** The platform adds zero risk to customer applications. If any component fails, requests proceed unmodified. The interceptor is engineered to degrade gracefully under every failure mode.
 
+**Control-plane / data-plane separation.** Production Kubernetes layout separates gateway and processor roles, with network policies that restrict gateway egress to Redis index access only.
+
 ## Technology Stack
 
 - **Language:** Python 3.12+
 - **API:** FastAPI + Uvicorn
 - **Graph Store:** Neo4j (production), in-memory (development)
 - **Event Bus:** Apache Kafka (production), in-memory (development)
-- **Index Cache:** Redis with local process cache
+- **Index Cache:** Redis with local process cache and durable fallback on LRU misses
 - **ML:** scikit-learn (isotonic regression), NumPy, SciPy
 - **Observability:** OpenTelemetry, Prometheus metrics
 - **Infrastructure:** Kubernetes (EKS/AKS/GKE), deployed in customer VPC

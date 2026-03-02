@@ -31,7 +31,7 @@ import structlog
 
 from aci.config import InterceptorConfig
 from aci.index.materializer import AttributionIndexStore
-from aci.interceptor.circuit_breaker import CircuitBreaker
+from aci.interceptor.circuit_breaker import CircuitBreaker, CircuitStateStore
 from aci.interceptor.shadow_warming import ShadowWarmer
 from aci.models.attribution import AttributionIndexEntry
 from aci.models.carbon import EnforcementAction, PolicyEvaluationResult
@@ -109,6 +109,7 @@ class FailOpenInterceptor:
         mode: DeploymentMode = DeploymentMode.ADVISORY,
         event_bus: Any | None = None,
         shadow_refresh_fn: Callable | None = None,
+        circuit_state_store: CircuitStateStore | None = None,
     ) -> None:
         self.index = index
         self.config = config or InterceptorConfig()
@@ -116,6 +117,7 @@ class FailOpenInterceptor:
         self.circuit_breaker = CircuitBreaker(
             failure_threshold=self.config.circuit_breaker_threshold,
             reset_timeout_s=self.config.circuit_breaker_reset_s,
+            state_store=circuit_state_store,
         )
 
         # Shadow warming (Section 6.3): probabilistic background refresh
@@ -455,6 +457,8 @@ class FailOpenInterceptor:
         Fire-and-forget: this must never block the critical path. If the event
         bus is unavailable, the event is dropped and logged.
         """
+        if not self.config.shadow_events_enabled:
+            return False
         if self._event_bus is None:
             return True
 

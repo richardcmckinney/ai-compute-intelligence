@@ -1,5 +1,5 @@
 ---
-# Namespace: platform runs inside customer VPC (Section 3).
+# Namespace: platform runs inside customer VPC trust boundary.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -15,8 +15,17 @@ metadata:
   namespace: aci-platform
 data:
   ACI_ENVIRONMENT: "production"
+  ACI_INDEX_BACKEND: "redis"
+  ACI_INDEX_REDIS_PREFIX: "aci:index"
+  ACI_KAFKA_BOOTSTRAP: "kafka:9092"
+  ACI_REDIS_URL: "redis://redis:6379/0"
+  ACI_EVENT_BUS_TOPIC: "aci.events"
+  ACI_EVENT_BUS_DLQ_TOPIC: "aci.events.dlq"
+  ACI_EVENT_BUS_CONSUMER_GROUP: "aci-processor"
   ACI_INTERCEPTOR_TIMEOUT_MS: "20"
   ACI_INTERCEPTOR_TOTAL_BUDGET_MS: "50"
+  ACI_INTERCEPTOR_CIRCUIT_STATE_BACKEND: "redis"
+  ACI_INTERCEPTOR_CIRCUIT_STATE_REDIS_KEY: "aci:circuit:interceptor"
   ACI_CONFIDENCE_CAP: "0.95"
   ACI_CONFIDENCE_CHARGEBACK_THRESHOLD: "0.80"
   ACI_CONFIDENCE_PROVISIONAL_THRESHOLD: "0.50"
@@ -24,26 +33,37 @@ data:
   ACI_TRAC_RISK_MULTIPLIER: "0.15"
   ACI_FBP_EPSILON_TOTAL_QUARTERLY: "4.0"
 ---
-# Deployment: main ACI platform service.
-apiVersion: apps/v1
-kind: Deployment
+# ServiceAccount: minimal RBAC.
+apiVersion: v1
+kind: ServiceAccount
 metadata:
   name: aci-platform
   namespace: aci-platform
+  annotations:
+    # For AWS: IAM role for read-only billing + CloudTrail access.
+    eks.amazonaws.com/role-arn: ""
+---
+# Deployment: gateway role (decision-time interceptor).
+# This tier is intentionally isolated: it only needs Redis index access.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aci-gateway
+  namespace: aci-platform
   labels:
     app: aci-platform
-    component: api
+    component: gateway
 spec:
   replicas: 3
   selector:
     matchLabels:
       app: aci-platform
-      component: api
+      component: gateway
   template:
     metadata:
       labels:
         app: aci-platform
-        component: api
+        component: gateway
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8000"
@@ -66,10 +86,16 @@ spec:
                 name: aci-config
             - secretRef:
                 name: aci-secrets
+          env:
+            - name: ACI_RUNTIME_ROLE
+              value: gateway
+            - name: ACI_EVENT_BUS_BACKEND
+              value: memory
+            - name: ACI_INTERCEPTOR_SHADOW_EVENTS_ENABLED
+              value: "false"
           resources:
             requests:
               cpu: "500m"
-              # Memory budget: 256MB for index + overhead (Section B, Phase 0).
               memory: "512Mi"
             limits:
               cpu: "2000m"
@@ -87,7 +113,73 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 10
 ---
-# Service: internal cluster access.
+# Deployment: async processor role (ingestion/reconciliation/materialization).
+# This tier is permitted to access Kafka/Neo4j/Redis.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aci-processor
+  namespace: aci-platform
+  labels:
+    app: aci-platform
+    component: processor
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: aci-platform
+      component: processor
+  template:
+    metadata:
+      labels:
+        app: aci-platform
+        component: processor
+    spec:
+      serviceAccountName: aci-platform
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: aci-platform
+          image: aci-platform:latest
+          ports:
+            - containerPort: 8000
+              name: http
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: aci-config
+            - secretRef:
+                name: aci-secrets
+          env:
+            - name: ACI_RUNTIME_ROLE
+              value: processor
+            - name: ACI_EVENT_BUS_BACKEND
+              value: kafka
+            - name: ACI_INTERCEPTOR_SHADOW_EVENTS_ENABLED
+              value: "false"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "768Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+# Service: expose gateway interceptor/API endpoint.
 apiVersion: v1
 kind: Service
 metadata:
@@ -96,7 +188,7 @@ metadata:
 spec:
   selector:
     app: aci-platform
-    component: api
+    component: gateway
   ports:
     - port: 80
       targetPort: http
@@ -104,27 +196,17 @@ spec:
       name: http
   type: ClusterIP
 ---
-# ServiceAccount: minimal RBAC.
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: aci-platform
-  namespace: aci-platform
-  annotations:
-    # For AWS: IAM role for read-only billing + CloudTrail access.
-    eks.amazonaws.com/role-arn: ""
----
-# HorizontalPodAutoscaler.
+# HorizontalPodAutoscaler for gateway traffic handling.
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: aci-platform
+  name: aci-gateway
   namespace: aci-platform
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: aci-platform
+    name: aci-gateway
   minReplicas: 3
   maxReplicas: 20
   metrics:
@@ -141,21 +223,42 @@ spec:
           type: Utilization
           averageUtilization: 80
 ---
-# NetworkPolicy: restrict egress to known endpoints only.
-# The platform operates within the customer trust boundary (Section 10).
+# Default deny-all egress in namespace.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: aci-platform-egress
+  name: aci-default-deny-egress
+  namespace: aci-platform
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+---
+# Default deny-all ingress in namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aci-default-deny-ingress
+  namespace: aci-platform
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+# Gateway egress: DNS + Redis only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aci-gateway-egress
   namespace: aci-platform
 spec:
   podSelector:
     matchLabels:
       app: aci-platform
+      component: gateway
   policyTypes:
     - Egress
   egress:
-    # Allow DNS resolution (scoped to kube-dns only).
     - to:
         - namespaceSelector:
             matchLabels:
@@ -168,24 +271,128 @@ spec:
           protocol: UDP
         - port: 53
           protocol: TCP
-    # Allow Kafka (event bus).
-    - to:
-        - podSelector:
-            matchLabels:
-              app: kafka
-      ports:
-        - port: 9092
-    # Allow Redis (attribution index).
     - to:
         - podSelector:
             matchLabels:
               app: redis
       ports:
         - port: 6379
-    # Allow Neo4j (graph store).
+          protocol: TCP
+---
+# Processor egress: DNS + Kafka + Neo4j + Redis.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aci-processor-egress
+  namespace: aci-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: aci-platform
+      component: processor
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
+              app: kafka
+      ports:
+        - port: 9092
+          protocol: TCP
     - to:
         - podSelector:
             matchLabels:
               app: neo4j
       ports:
         - port: 7687
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - port: 6379
+          protocol: TCP
+---
+# Redis ingress: only gateway + processor can access.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-ingress-from-aci
+  namespace: aci-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: aci-platform
+              component: gateway
+        - podSelector:
+            matchLabels:
+              app: aci-platform
+              component: processor
+      ports:
+        - port: 6379
+          protocol: TCP
+---
+# Kafka ingress: processor only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kafka-ingress-from-processor
+  namespace: aci-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: kafka
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: aci-platform
+              component: processor
+      ports:
+        - port: 9092
+          protocol: TCP
+---
+# Neo4j ingress: processor only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: neo4j-ingress-from-processor
+  namespace: aci-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: neo4j
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: aci-platform
+              component: processor
+      ports:
+        - port: 7687
+          protocol: TCP
