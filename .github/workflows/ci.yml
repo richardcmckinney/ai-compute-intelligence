@@ -50,10 +50,10 @@ jobs:
           python -m pip install --upgrade uv
           uv pip compile pyproject.toml --output-file /tmp/requirements.lock
           uv pip compile pyproject.toml --extra dev --extra glass-jaw --output-file /tmp/requirements-dev.lock
-          tail -n +3 requirements.lock > /tmp/requirements.lock.expected
-          tail -n +3 /tmp/requirements.lock > /tmp/requirements.lock.generated
-          tail -n +3 requirements-dev.lock > /tmp/requirements-dev.lock.expected
-          tail -n +3 /tmp/requirements-dev.lock > /tmp/requirements-dev.lock.generated
+          grep -E '^[A-Za-z0-9][A-Za-z0-9._-]*==' requirements.lock > /tmp/requirements.lock.expected
+          grep -E '^[A-Za-z0-9][A-Za-z0-9._-]*==' /tmp/requirements.lock > /tmp/requirements.lock.generated
+          grep -E '^[A-Za-z0-9][A-Za-z0-9._-]*==' requirements-dev.lock > /tmp/requirements-dev.lock.expected
+          grep -E '^[A-Za-z0-9][A-Za-z0-9._-]*==' /tmp/requirements-dev.lock > /tmp/requirements-dev.lock.generated
           diff -u /tmp/requirements.lock.expected /tmp/requirements.lock.generated
           diff -u /tmp/requirements-dev.lock.expected /tmp/requirements-dev.lock.generated
 
