@@ -55,6 +55,11 @@ metadata:
     component: gateway
 spec:
   replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: aci-platform
@@ -102,16 +107,22 @@ spec:
               memory: "1Gi"
           livenessProbe:
             httpGet:
-              path: /health
+              path: /live
               port: http
             initialDelaySeconds: 10
             periodSeconds: 30
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10
+          startupProbe:
+            httpGet:
+              path: /live
+              port: http
+            periodSeconds: 5
+            failureThreshold: 24
 ---
 # Deployment: async processor role (ingestion/reconciliation/materialization).
 # This tier is permitted to access Kafka/Neo4j/Redis.
@@ -125,6 +136,11 @@ metadata:
     component: processor
 spec:
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
   selector:
     matchLabels:
       app: aci-platform
@@ -168,16 +184,22 @@ spec:
               memory: "2Gi"
           livenessProbe:
             httpGet:
-              path: /health
+              path: /live
               port: http
             initialDelaySeconds: 10
             periodSeconds: 30
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10
+          startupProbe:
+            httpGet:
+              path: /live
+              port: http
+            periodSeconds: 5
+            failureThreshold: 24
 ---
 # Service: expose gateway interceptor/API endpoint.
 apiVersion: v1
@@ -195,6 +217,32 @@ spec:
       protocol: TCP
       name: http
   type: ClusterIP
+---
+# PodDisruptionBudget: keep at least two gateway pods available during voluntary disruptions.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aci-gateway
+  namespace: aci-platform
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: aci-platform
+      component: gateway
+---
+# PodDisruptionBudget: keep at least one processor pod available during voluntary disruptions.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aci-processor
+  namespace: aci-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: aci-platform
+      component: processor
 ---
 # HorizontalPodAutoscaler for gateway traffic handling.
 apiVersion: autoscaling/v2
@@ -244,6 +292,35 @@ spec:
   podSelector: {}
   policyTypes:
     - Ingress
+---
+# Gateway ingress: allow service traffic from platform namespace and ingress controller namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aci-gateway-ingress
+  namespace: aci-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: aci-platform
+      component: gateway
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: aci-platform
+      ports:
+        - port: 8000
+          protocol: TCP
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: 8000
+          protocol: TCP
 ---
 # Gateway egress: DNS + Redis only.
 apiVersion: networking.k8s.io/v1

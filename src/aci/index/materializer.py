@@ -139,6 +139,17 @@ class AttributionIndexStore:
                 "durable_errors": self._durable_errors,
             }
 
+    def durable_backend_healthy(self) -> bool:
+        """Fast readiness probe for the optional durable Redis backend."""
+        if self._redis is None:
+            return False
+        try:
+            return bool(self._redis.ping())
+        except RedisError:
+            with self._lock:
+                self._durable_errors += 1
+            return False
+
     def materialize(self, entry: AttributionIndexEntry) -> None:
         """
         Upsert an entry into the index.

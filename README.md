@@ -144,6 +144,11 @@ mypy src/aci/ --ignore-missing-imports
 uvicorn aci.api.app:app --reload --port 8000
 ```
 
+Operational probes:
+- `GET /live` for liveness.
+- `GET /ready` for readiness (returns `503` when dependencies are unavailable).
+- `GET /health` for a summarized operator health snapshot.
+
 ## Frontend Mockup
 
 The repository now includes two platform mockups:

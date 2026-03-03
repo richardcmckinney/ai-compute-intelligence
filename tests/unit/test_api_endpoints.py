@@ -20,6 +20,16 @@ def test_root_and_health_endpoints() -> None:
         health_payload = health.json()
         assert health_payload["status"] == "healthy"
 
+        live = client.get("/live")
+        assert live.status_code == 200
+        assert live.json()["status"] == "alive"
+
+        ready = client.get("/ready")
+        assert ready.status_code == 200
+        ready_payload = ready.json()
+        assert ready_payload["status"] == "ready"
+        assert all(ready_payload["checks"].values())
+
 
 def test_event_ingest_is_idempotent_by_source_and_key() -> None:
     event_payload = {

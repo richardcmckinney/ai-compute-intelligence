@@ -128,6 +128,11 @@ class InMemoryEventBus:
         """No-op for interface parity with durable bus backends."""
         return None
 
+    @property
+    def is_started(self) -> bool:
+        """In-memory backend is always available once instantiated."""
+        return True
+
     async def publish(self, event: DomainEvent) -> bool:
         """
         Publish an event to the bus.
@@ -230,6 +235,8 @@ class InMemoryEventBus:
     @property
     def stats(self) -> dict:
         return {
+            "backend": "memory",
+            "started": True,
             "total_events": len(self._log),
             "published": self._published_count,
             "deduplicated": self._deduplicated_count,
@@ -325,6 +332,11 @@ class KafkaEventBus:
 
         await self._idempotency_store.close()
         self._started = False
+
+    @property
+    def is_started(self) -> bool:
+        """Whether Kafka producer/consumer loops are initialized."""
+        return self._started
 
     def subscribe(self, topic: str, handler: EventHandler) -> None:
         self._handlers[topic].append(handler)
@@ -472,6 +484,7 @@ class KafkaEventBus:
     def stats(self) -> dict:
         return {
             "backend": "kafka",
+            "started": self._started,
             "published": self._published_count,
             "deduplicated": self._deduplicated_count,
             "dispatch_errors": self._dispatch_errors,

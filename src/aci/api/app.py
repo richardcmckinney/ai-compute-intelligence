@@ -9,13 +9,15 @@ on deployment topology.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import structlog
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -125,6 +127,19 @@ class AppState:
     async def stop(self) -> None:
         await self.event_bus.stop()
 
+    def readiness_checks(self) -> dict[str, bool]:
+        """Evaluate lightweight readiness checks for probe endpoints."""
+        checks = {
+            "event_bus_started": bool(getattr(self.event_bus, "is_started", True)),
+        }
+
+        if self.config.index_backend.lower() == "redis":
+            checks["index_durable_backend_healthy"] = self.index_store.durable_backend_healthy()
+        else:
+            checks["index_durable_backend_healthy"] = True
+
+        return checks
+
 
 state = AppState()
 
@@ -145,6 +160,20 @@ app = FastAPI(
     version="0.2.0",
     lifespan=lifespan,
 )
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
+
+@app.middleware("http")
+async def add_security_headers(
+    request: Request,
+    call_next: Callable[[Request], Awaitable[Response]],
+) -> Response:
+    """Apply baseline security headers to all HTTP responses."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    return response
 
 # Serve improved platform mockup from the repo.
 frontend_dir = Path(__file__).resolve().parents[3] / "frontend"
@@ -170,6 +199,17 @@ class HealthResponse(BaseModel):
     runtime_role: str
     interceptor_mode: str
     circuit_breaker: str
+
+
+class LivenessResponse(BaseModel):
+    status: str
+    timestamp: str
+
+
+class ReadinessResponse(BaseModel):
+    status: str
+    timestamp: str
+    checks: dict[str, bool]
 
 
 class InterceptRequest(BaseModel):
@@ -279,14 +319,45 @@ async def root() -> RootResponse:
 
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
-    """Platform health check."""
+    """Platform summary health check for operators."""
+    checks = state.readiness_checks()
+    status = "healthy" if all(checks.values()) else "degraded"
     return HealthResponse(
-        status="healthy",
+        status=status,
         timestamp=datetime.now(UTC).isoformat(),
         index_size=state.index_store.size,
         runtime_role=state.runtime_role,
         interceptor_mode=state.interceptor.mode.value,
         circuit_breaker=state.interceptor.circuit_breaker.state,
+    )
+
+
+@app.get("/live", response_model=LivenessResponse)
+async def live() -> LivenessResponse:
+    """Liveness probe endpoint: process is up and serving requests."""
+    return LivenessResponse(
+        status="alive",
+        timestamp=datetime.now(UTC).isoformat(),
+    )
+
+
+@app.get("/ready", response_model=ReadinessResponse)
+async def ready() -> ReadinessResponse:
+    """Readiness probe endpoint: required runtime dependencies are available."""
+    checks = state.readiness_checks()
+    if not all(checks.values()):
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "not_ready",
+                "checks": checks,
+            },
+        )
+
+    return ReadinessResponse(
+        status="ready",
+        timestamp=datetime.now(UTC).isoformat(),
+        checks=checks,
     )
 
 
