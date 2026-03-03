@@ -1,34 +1,51 @@
-FROM python:3.12-slim AS base
+ARG PYTHON_IMAGE=python:3.12-slim
+
+FROM ${PYTHON_IMAGE} AS builder
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+# Copy lockfile and source for deterministic, reproducible builds.
+COPY requirements.lock pyproject.toml ./
+COPY src/ src/
+
+RUN python -m pip install --upgrade pip && \
+    python -m pip install --prefix=/install -r requirements.lock && \
+    python -m pip install --prefix=/install --no-deps .
+
+
+FROM ${PYTHON_IMAGE} AS runtime
 
 LABEL org.opencontainers.image.title="ACI Platform"
 LABEL org.opencontainers.image.description="AI Compute Intelligence Platform"
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
 
-# Install system dependencies.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy source and build metadata together so the build backend
-# can find the package during install.
-COPY pyproject.toml .
+COPY --from=builder /install /usr/local
+
+# Keep source in image for stack traces and mounted static assets.
+COPY pyproject.toml ./
 COPY src/ src/
+COPY frontend/ frontend/
 
-# Install the application and runtime server.
-RUN pip install --no-cache-dir . && \
-    pip install --no-cache-dir uvicorn[standard]
-
-# Create non-root user.
 RUN useradd --create-home --shell /bin/bash aci && \
-    chown -R aci:aci /app
+    mkdir -p /tmp && \
+    chown -R aci:aci /app /tmp
 USER aci
 
-# Health check.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 

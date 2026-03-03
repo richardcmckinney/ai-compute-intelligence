@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
+from jwt import encode
 
 from aci.api.app import app, state
 
@@ -36,7 +37,7 @@ def test_event_ingest_is_idempotent_by_source_and_key() -> None:
         "event_type": "inference.request",
         "subject_id": "req-aci-1",
         "attributes": {"service_name": "customer-support-bot", "model": "gpt-4o-mini", "provider": "openai"},
-        "event_time": datetime.now(timezone.utc).isoformat(),
+        "event_time": datetime.now(UTC).isoformat(),
         "source": "unit-test",
         "idempotency_key": "req-aci-1",
     }
@@ -56,7 +57,7 @@ def test_event_ingest_rejects_invalid_event_payload() -> None:
         "event_type": "inference.request",
         "subject_id": "req-bad-1",
         "attributes": {"provider": "openai"},  # Missing required "model".
-        "event_time": datetime.now(timezone.utc).isoformat(),
+        "event_time": datetime.now(UTC).isoformat(),
         "source": "unit-test",
         "idempotency_key": "req-bad-1",
     }
@@ -107,3 +108,57 @@ def test_intercept_endpoint_can_be_disabled_by_runtime_role_flag() -> None:
             assert "interceptor disabled" in response.json()["detail"]
     finally:
         state.accepts_interception = old_accepts_interception
+
+
+def test_v1_endpoints_require_auth_outside_development() -> None:
+    original_environment = state.config.environment
+    original_enabled = state.config.auth.enabled
+    original_algorithm = state.config.auth.jwt_algorithm
+    original_secret = state.config.auth.jwt_hs256_secret
+    original_issuer = state.config.auth.jwt_issuer
+    original_audience = state.config.auth.jwt_audience
+    original_required_scope = state.config.auth.required_scope
+    original_tenant_claim = state.config.auth.tenant_claim
+
+    state.config.environment = "production"
+    state.config.auth.enabled = True
+    state.config.auth.jwt_algorithm = "HS256"
+    state.config.auth.jwt_hs256_secret = "unit-test-secret-unit-test-secret-32"
+    state.config.auth.jwt_issuer = "aci-tests"
+    state.config.auth.jwt_audience = "aci-api"
+    state.config.auth.required_scope = "aci.api"
+    state.config.auth.tenant_claim = "tenant_id"
+
+    token = encode(
+        {
+            "sub": "svc-gateway",
+            "iss": "aci-tests",
+            "aud": "aci-api",
+            "tenant_id": state.config.tenant_id,
+            "scope": "aci.api",
+            "iat": int(datetime.now(UTC).timestamp()),
+            "exp": int((datetime.now(UTC) + timedelta(minutes=5)).timestamp()),
+        },
+        key="unit-test-secret-unit-test-secret-32",
+        algorithm="HS256",
+    )
+
+    try:
+        with TestClient(app) as client:
+            unauthenticated = client.get("/v1/dashboard/overview")
+            assert unauthenticated.status_code == 401
+
+            authenticated = client.get(
+                "/v1/dashboard/overview",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert authenticated.status_code == 200
+    finally:
+        state.config.environment = original_environment
+        state.config.auth.enabled = original_enabled
+        state.config.auth.jwt_algorithm = original_algorithm
+        state.config.auth.jwt_hs256_secret = original_secret
+        state.config.auth.jwt_issuer = original_issuer
+        state.config.auth.jwt_audience = original_audience
+        state.config.auth.required_scope = original_required_scope
+        state.config.auth.tenant_claim = original_tenant_claim

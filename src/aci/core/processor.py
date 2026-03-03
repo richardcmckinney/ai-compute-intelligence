@@ -80,7 +80,7 @@ class AttributionProcessor:
         workload_id = attrs.get("service_name") or attrs.get("cloud_resource_arn") or event.subject_id
 
         # Build reconciliation context from graph state.
-        context = self._build_context(workload_id, event.event_time)
+        context = self._build_context(workload_id, event.event_time, event.tenant_id)
 
         # Run HRE.
         result = self.hre.resolve(
@@ -243,6 +243,7 @@ class AttributionProcessor:
         self,
         workload_id: str,
         event_time: datetime,
+        tenant_id: str,
     ) -> ReconciliationContext:
         """
         Build reconciliation context from current graph state.
@@ -251,6 +252,7 @@ class AttributionProcessor:
         and historical attributions relevant to the workload.
         """
         ctx = ReconciliationContext()
+        ctx.tenant_id = tenant_id
 
         # R1: Check for direct identifier mappings in the graph.
         # Look for edges from the workload to known entities.

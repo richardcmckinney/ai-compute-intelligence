@@ -52,6 +52,16 @@ class InterceptorConfig(BaseSettings):
     # Stale-while-revalidate: serve last known entry during refresh.
     stale_while_revalidate: bool = Field(default=True)
 
+    # Header enrichment budget controls.
+    max_enrichment_header_bytes: int = Field(
+        default=4096,
+        description="Max total bytes for generated enrichment headers",
+    )
+    max_header_value_length: int = Field(
+        default=512,
+        description="Max length of each generated header value",
+    )
+
 
 class ConfidenceConfig(BaseSettings):
     """Confidence governance configuration (Patent Spec Section 5)."""
@@ -179,6 +189,32 @@ class FBPConfig(BaseSettings):
     max_churn_rate: float = Field(default=0.20, description="Max month-over-month churn")
 
 
+class AuthConfig(BaseSettings):
+    """Service-to-service API authentication configuration."""
+
+    model_config = {"env_prefix": "ACI_AUTH_"}
+
+    enabled: bool = Field(default=True, description="Enable bearer-token auth for API routes")
+    allow_dev_bypass: bool = Field(
+        default=True,
+        description="Allow unauthenticated requests in development only",
+    )
+    jwt_algorithm: str = Field(default="HS256", description="JWT signing algorithm")
+    jwt_issuer: str = Field(default="aci-control-plane", description="Expected JWT issuer")
+    jwt_audience: str = Field(default="aci-api", description="Expected JWT audience")
+    jwt_hs256_secret: str = Field(
+        default="dev-only-secret",
+        description="Shared HMAC secret for HS256",
+    )
+    jwt_public_key_pem: str = Field(
+        default="",
+        description="PEM-encoded public key for asymmetric JWT validation",
+    )
+    required_scope: str = Field(default="aci.api", description="Required service scope")
+    tenant_claim: str = Field(default="tenant_id", description="JWT claim holding tenant id")
+    clock_skew_seconds: int = Field(default=60, description="Allowed JWT clock skew in seconds")
+
+
 class PlatformConfig(BaseSettings):
     """Top-level platform configuration aggregating all subsystem configs."""
 
@@ -199,6 +235,7 @@ class PlatformConfig(BaseSettings):
     carbon: CarbonConfig = Field(default_factory=CarbonConfig)
     equivalence: EquivalenceConfig = Field(default_factory=EquivalenceConfig)
     fbp: FBPConfig = Field(default_factory=FBPConfig)
+    auth: AuthConfig = Field(default_factory=AuthConfig)
 
     # Infrastructure endpoints.
     index_max_entries: int = Field(
@@ -259,6 +296,29 @@ class PlatformConfig(BaseSettings):
         production_like = self.environment.lower() in {"production", "staging"}
         if production_like and not self.neo4j_password:
             raise ValueError("neo4j_password must be configured in production/staging")
+
+        non_production_envs = {"development", "dev", "test", "testing", "local"}
+        env_name = self.environment.lower()
+        if self.auth.allow_dev_bypass and env_name not in non_production_envs:
+            raise ValueError(
+                "auth.allow_dev_bypass may only be enabled in non-production environments"
+            )
+
+        algorithm = self.auth.jwt_algorithm.upper()
+        if self.auth.enabled:
+            if algorithm.startswith("HS") and not self.auth.jwt_hs256_secret:
+                if not (env_name in non_production_envs and self.auth.allow_dev_bypass):
+                    raise ValueError("auth.jwt_hs256_secret is required for HS* auth algorithms")
+            if algorithm.startswith("RS") and not self.auth.jwt_public_key_pem:
+                if not (env_name in non_production_envs and self.auth.allow_dev_bypass):
+                    raise ValueError("auth.jwt_public_key_pem is required for RS* auth algorithms")
+
+        if production_like and algorithm.startswith("HS"):
+            weak_defaults = {"", "dev-only-secret"}
+            if self.auth.jwt_hs256_secret in weak_defaults:
+                raise ValueError(
+                    "auth.jwt_hs256_secret must be set to a strong non-default value in production/staging"
+                )
 
         if self.event_bus_backend == "kafka" and not self.kafka_bootstrap:
             raise ValueError("kafka_bootstrap must be configured when event_bus_backend='kafka'")

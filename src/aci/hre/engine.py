@@ -58,6 +58,8 @@ class ReconciliationContext:
     """
 
     def __init__(self) -> None:
+        self.tenant_id: str = "default"
+
         # R1: Direct identifier mappings (api_key -> person, arn -> service, etc.).
         self.identity_mappings: dict[str, str] = {}
 
@@ -124,7 +126,7 @@ class HeuristicReconciliationEngine:
         5. Produce an AttributionResult with explanation artifact.
         """
         started = time.monotonic()
-        cache_key = f"{entity_type}:{entity_id}"
+        cache_key = f"{context.tenant_id}:{entity_type}:{entity_id}"
         cached = self._get_cached(cache_key)
         if cached is not None:
             return cached

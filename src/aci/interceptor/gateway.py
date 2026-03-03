@@ -442,7 +442,49 @@ class FailOpenInterceptor:
         if violations:
             headers["X-Policy-Violations"] = str(len(violations))
 
-        return headers
+        return self._enforce_header_budget(headers)
+
+    def _enforce_header_budget(self, headers: dict[str, str]) -> dict[str, str]:
+        """
+        Enforce max header size budget and clamp oversized values.
+
+        Reliability guardrail: avoid oversized headers that upstream gateways
+        may reject or truncate unexpectedly.
+        """
+        clamped = {
+            key: value[: self.config.max_header_value_length]
+            for key, value in headers.items()
+        }
+
+        max_bytes = self.config.max_enrichment_header_bytes
+        if self._estimate_header_bytes(clamped) <= max_bytes:
+            return clamped
+
+        # Keep core attribution headers; drop optional headers first.
+        priority = [
+            "X-Compute-Cost-USD",
+            "X-Attribution-Confidence",
+            "X-Attribution-Team",
+            "X-Attribution-Method",
+            "X-Confidence-Flag",
+            "X-Policy-Violations",
+            "X-Budget-Remaining-Pct",
+            "X-Alternative-Models-Available",
+        ]
+        trimmed: dict[str, str] = {}
+        for key in priority:
+            if key in clamped:
+                trimmed[key] = clamped[key]
+            if self._estimate_header_bytes(trimmed) > max_bytes:
+                trimmed.pop(key, None)
+                break
+
+        trimmed["X-Header-Budget-Applied"] = "1"
+        return trimmed
+
+    @staticmethod
+    def _estimate_header_bytes(headers: dict[str, str]) -> int:
+        return sum(len(key) + len(value) + 4 for key, value in headers.items())
 
     def _emit_shadow_event(
         self,

@@ -18,9 +18,17 @@ from typing import Any
 import structlog
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from jwt import InvalidTokenError
 from pydantic import BaseModel, Field
 
+from aci.api.auth import (
+    can_bypass_auth,
+    decode_and_validate_token,
+    is_auth_required,
+    is_public_path,
+)
 from aci.config import PlatformConfig
 from aci.confidence.calibration import CalibrationEngine
 from aci.core.event_bus import (
@@ -174,6 +182,45 @@ async def add_security_headers(
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     return response
+
+
+@app.middleware("http")
+async def enforce_service_auth(
+    request: Request,
+    call_next: Callable[[Request], Awaitable[Response]],
+) -> Response:
+    """Enforce bearer-token authentication for private API endpoints."""
+    path = request.url.path
+    if is_public_path(path) or not is_auth_required(path):
+        return await call_next(request)
+
+    auth_config = state.config.auth
+    if not auth_config.enabled:
+        return await call_next(request)
+
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        if can_bypass_auth(state.config):
+            return await call_next(request)
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "missing bearer token"},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    token = auth_header.removeprefix("Bearer ").strip()
+    try:
+        claims = decode_and_validate_token(token, auth_config, state.config.tenant_id)
+    except InvalidTokenError as exc:
+        logger.warning("auth.token_invalid", error=str(exc), path=path)
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "invalid bearer token"},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    request.state.auth_claims = claims
+    return await call_next(request)
 
 # Serve improved platform mockup from the repo.
 frontend_dir = Path(__file__).resolve().parents[3] / "frontend"

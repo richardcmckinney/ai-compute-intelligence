@@ -30,6 +30,7 @@ Phase 6: Reporting      Dashboards, compliance exports, federated benchmarks
 - `AttributionIndexStore` now supports Redis durable fallback so LRU eviction does not permanently lose active attributions.
 - `CircuitBreaker` now supports Redis-backed shared state to keep fail-open behavior consistent across replicas.
 - `FailOpenInterceptor` now resolves workload IDs more robustly and hardens shadow-event emission behavior.
+- API endpoints under `/v1/*` now enforce service-to-service JWT auth with issuer/audience/scope and tenant-claim checks.
 
 ### Core Innovations
 
@@ -130,8 +131,9 @@ locust -f tests/glass_jaw/locustfile.py --host=http://localhost:8000 \
 ## Development
 
 ```bash
-# Install with dev dependencies.
-pip install -e ".[dev]"
+# Install deterministic development toolchain.
+pip install -r requirements-dev.lock
+pip install --no-deps -e .
 
 # Run all tests.
 pytest tests/ -v
@@ -144,10 +146,30 @@ mypy src/aci/ --ignore-missing-imports
 uvicorn aci.api.app:app --reload --port 8000
 ```
 
+Authentication behavior:
+- Development: unauthenticated access is allowed only when `ACI_ENVIRONMENT=development` and `ACI_AUTH_ALLOW_DEV_BYPASS=true`.
+- Staging/Production: bearer token is required for `/v1/*`, with JWT validation for issuer, audience, scope, expiry, and tenant claim.
+
 Operational probes:
 - `GET /live` for liveness.
 - `GET /ready` for readiness (returns `503` when dependencies are unavailable).
 - `GET /health` for a summarized operator health snapshot.
+
+Pre-commit security checks:
+
+```bash
+pre-commit install
+pre-commit run --all-files
+```
+
+Secret scanning is enforced by the `gitleaks` pre-commit hook.
+
+## Event Bus DLQ Semantics
+
+- DLQ trigger: any event consumer failure in Kafka mode (schema decode failure, handler exception, or dispatch failure) writes the original payload plus error metadata to `ACI_EVENT_BUS_DLQ_TOPIC`.
+- Commit behavior: failed events are committed after DLQ publication to prevent hot-loop reprocessing on poisoned messages.
+- Replay strategy: run a controlled reprocessor job that reads from DLQ, fixes payload/version issues, and republishes with a new idempotency key.
+- Idempotency: Redis-backed dedup (`ACI_EVENT_BUS_DEDUP_TTL_S`) prevents duplicate side effects when replaying corrected events.
 
 ## Frontend Mockup
 
