@@ -1,6 +1,6 @@
 # AI Compute Intelligence Platform
 
-Application-level cost and carbon attribution for enterprise AI workloads.
+Application-level cost attribution for enterprise AI workloads.
 
 ## Problem
 
