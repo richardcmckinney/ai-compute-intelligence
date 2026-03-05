@@ -4,7 +4,6 @@ Unit tests for confidence calibration, TRAC calculator, and fail-open intercepto
 
 from __future__ import annotations
 
-
 import pytest
 
 from aci.confidence.calibration import CalibrationEngine
@@ -17,12 +16,12 @@ from aci.interceptor.gateway import (
 )
 from aci.models.attribution import AttributionIndexEntry
 from aci.models.confidence import ConfidenceTier, GroundTruthLabel
-from aci.trac.calculator import TRACCalculator
-
+from aci.trac.calculator import TRACCalculator, TRACWorkloadInput
 
 # ---------------------------------------------------------------------------
 # Confidence Calibration
 # ---------------------------------------------------------------------------
+
 
 class TestCalibrationEngine:
     """Tests for the confidence calibration system (Section 5.2)."""
@@ -51,18 +50,21 @@ class TestCalibrationEngine:
         """No calibrated score should exceed 0.95 after isotonic fit."""
         # Add enough ground truth to trigger isotonic fit for R1.
         import random
+
         random.seed(42)
         for i in range(250):
-            self.engine.add_ground_truth(GroundTruthLabel(
-                attribution_id=f"attr_{i}",
-                true_team_id="team-a",
-                true_cost_center_id="cc-1",
-                source="cicd_provenance",
-                predicted_team_id="team-a",
-                predicted_confidence=1.0,
-                method_used="R1",
-                was_correct=True,
-            ))
+            self.engine.add_ground_truth(
+                GroundTruthLabel(
+                    attribution_id=f"attr_{i}",
+                    true_team_id="team-a",
+                    true_cost_center_id="cc-1",
+                    source="cicd_provenance",
+                    predicted_team_id="team-a",
+                    predicted_confidence=1.0,
+                    method_used="R1",
+                    was_correct=True,
+                )
+            )
         calibrated = self.engine.calibrate("R1", 1.0)
         assert calibrated <= 0.95
 
@@ -74,36 +76,41 @@ class TestCalibrationEngine:
     def test_insufficient_samples_keeps_warm_start(self) -> None:
         """Below 50 samples: warm-start curve is unchanged."""
         for i in range(30):
-            self.engine.add_ground_truth(GroundTruthLabel(
-                attribution_id=f"attr_{i}",
-                true_team_id="team-a",
-                true_cost_center_id="cc-1",
-                source="cicd_provenance",
-                predicted_team_id="team-a",
-                predicted_confidence=0.8,
-                method_used="R2",
-                was_correct=True,
-            ))
+            self.engine.add_ground_truth(
+                GroundTruthLabel(
+                    attribution_id=f"attr_{i}",
+                    true_team_id="team-a",
+                    true_cost_center_id="cc-1",
+                    source="cicd_provenance",
+                    predicted_team_id="team-a",
+                    predicted_confidence=0.8,
+                    method_used="R2",
+                    was_correct=True,
+                )
+            )
         # R2 should still be warm-start (no fit triggered below 50 samples).
         assert self.engine.curves["R2"].is_warm_start is True
 
     def test_sufficient_samples_fits_isotonic(self) -> None:
         """At 200+ samples, full isotonic regression kicks in."""
         import random
+
         random.seed(42)
         for i in range(250):
             conf = random.uniform(0.3, 0.95)
             correct = random.random() < conf
-            self.engine.add_ground_truth(GroundTruthLabel(
-                attribution_id=f"attr_{i}",
-                true_team_id="team-a",
-                true_cost_center_id="cc-1",
-                source="finops_review",
-                predicted_team_id="team-a" if correct else "team-b",
-                predicted_confidence=conf,
-                method_used="R2",
-                was_correct=correct,
-            ))
+            self.engine.add_ground_truth(
+                GroundTruthLabel(
+                    attribution_id=f"attr_{i}",
+                    true_team_id="team-a",
+                    true_cost_center_id="cc-1",
+                    source="finops_review",
+                    predicted_team_id="team-a" if correct else "team-b",
+                    predicted_confidence=conf,
+                    method_used="R2",
+                    was_correct=correct,
+                )
+            )
         assert self.engine.curves["R2"].sample_count == 250
         assert self.engine.curves["R2"].is_warm_start is False
 
@@ -121,6 +128,7 @@ class TestCalibrationEngine:
 # ---------------------------------------------------------------------------
 # TRAC Calculator
 # ---------------------------------------------------------------------------
+
 
 class TestTRACCalculator:
     """Tests for TRAC computation (Section 7)."""
@@ -173,7 +181,7 @@ class TestTRACCalculator:
 
     def test_batch_computation(self) -> None:
         """Batch TRAC computation."""
-        workloads = [
+        workloads: list[TRACWorkloadInput] = [
             {"workload_id": "a", "billed_cost_usd": 50.0, "attribution_confidence": 0.9},
             {"workload_id": "b", "billed_cost_usd": 200.0, "attribution_confidence": 0.6},
         ]
@@ -186,6 +194,7 @@ class TestTRACCalculator:
 # Fail-Open Interceptor
 # ---------------------------------------------------------------------------
 
+
 class TestFailOpenInterceptor:
     """Tests for the fail-open decision-time interceptor (Section 6)."""
 
@@ -196,7 +205,9 @@ class TestFailOpenInterceptor:
             mode=DeploymentMode.ADVISORY,
         )
 
-    def _make_request(self, service_name: str = "test-svc", model: str = "gpt-4o") -> InterceptionRequest:
+    def _make_request(
+        self, service_name: str = "test-svc", model: str = "gpt-4o"
+    ) -> InterceptionRequest:
         return InterceptionRequest(
             request_id="req-001",
             model=model,
@@ -248,10 +259,12 @@ class TestFailOpenInterceptor:
     async def test_budget_violation_soft_stop(self) -> None:
         """Budget > 90% utilization triggers soft stop."""
         entry = self._make_index_entry()
-        entry = entry.model_copy(update={
-            "budget_remaining_usd": 100.0,
-            "budget_limit_usd": 5000.0,
-        })
+        entry = entry.model_copy(
+            update={
+                "budget_remaining_usd": 100.0,
+                "budget_limit_usd": 5000.0,
+            }
+        )
         self.store.materialize(entry)
         result = await self.interceptor.intercept(self._make_request())
         assert result.outcome == InterceptionOutcome.SOFT_STOPPED

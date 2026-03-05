@@ -11,24 +11,39 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from difflib import SequenceMatcher
+from types import MappingProxyType
+from typing import TYPE_CHECKING
 
 import structlog
 
 logger = structlog.get_logger()
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 @dataclass(frozen=True)
 class ReconciliationSignal:
     """A single reconciliation signal from one method."""
 
-    method: str                  # R1-R6
-    source_entity: str           # The entity being resolved
-    target_entity: str           # The resolved target
-    confidence: float            # Raw (pre-calibration) confidence
-    signals: list[str] = field(default_factory=list)
-    feature_values: dict = field(default_factory=dict)
+    method: str  # R1-R6
+    source_entity: str  # The entity being resolved
+    target_entity: str  # The resolved target
+    confidence: float  # Raw (pre-calibration) confidence
+    signals: tuple[str, ...] = ()
+    feature_values: Mapping[str, object] = field(
+        default_factory=lambda: MappingProxyType({}),
+    )
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "signals", tuple(self.signals))
+        object.__setattr__(
+            self,
+            "feature_values",
+            MappingProxyType(dict(self.feature_values)),
+        )
 
 
 class R1DirectMatch:
@@ -54,7 +69,7 @@ class R1DirectMatch:
                 source_entity=entity_id,
                 target_entity=identity_mappings[entity_id],
                 confidence=1.0,
-                signals=[f"direct_match:{entity_id}"],
+                signals=(f"direct_match:{entity_id}",),
                 feature_values={"match_type": "exact_identifier"},
             )
 
@@ -67,7 +82,7 @@ class R1DirectMatch:
                     source_entity=entity_id,
                     target_entity=target,
                     confidence=0.98,
-                    signals=[f"normalized_match:{entity_id}->{key}"],
+                    signals=(f"normalized_match:{entity_id}->{key}",),
                     feature_values={"match_type": "normalized_identifier"},
                 )
 
@@ -135,7 +150,7 @@ class R2TemporalCorrelation:
             source_entity=event_entity,
             target_entity=target,
             confidence=round(base_confidence, 3),
-            signals=[f"temporal:{source}:{delta_s:.0f}s"],
+            signals=(f"temporal:{source}:{delta_s:.0f}s",),
             feature_values={
                 "time_delta_seconds": delta_s,
                 "competing_events": competing_count,
@@ -204,7 +219,7 @@ class R3NamingConvention:
             source_entity=entity_name,
             target_entity=best_team,
             confidence=round(confidence, 3),
-            signals=[f"naming:{best_pattern}:{best_score:.2f}"],
+            signals=(f"naming:{best_pattern}:{best_score:.2f}",),
             feature_values={
                 "string_similarity": round(best_score, 3),
                 "matched_pattern": best_pattern,
@@ -275,7 +290,7 @@ class R4HistoricalPattern:
             source_entity=entity_id,
             target_entity=best_team,
             confidence=round(confidence, 3),
-            signals=[f"historical:{best_team}:{team_counts[best_team]}"],
+            signals=(f"historical:{best_team}:{team_counts[best_team]}",),
             feature_values={
                 "prior_match_count": team_counts[best_team],
                 "dominance_ratio": round(dominance, 3),
@@ -308,7 +323,7 @@ class R5ServiceAccountResolution:
         Combines multiple weak signals: who deployed it most recently,
         who owns the code it runs, who used it most recently.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         scores: dict[str, float] = {}
 
         # Signal 1: Most recent deployer (strongest signal for service accounts).
@@ -342,12 +357,12 @@ class R5ServiceAccountResolution:
             source_entity=service_account,
             target_entity=best_owner,
             confidence=round(confidence, 3),
-            signals=[
+            signals=(
                 f"svc_account:{service_account}",
                 f"deployer:{len(deployment_owners)}",
                 f"code_owners:{len(code_owners)}",
                 f"recent_users:{len(recent_set)}",
-            ],
+            ),
             feature_values={
                 "signal_count": len(scores),
                 "best_score": round(scores[best_owner], 3),
@@ -394,16 +409,18 @@ class R6ProportionalAllocation:
             # If one team accounts for 90% of usage, confidence is higher.
             confidence = min(0.65, 0.3 + proportion * 0.4)
 
-            signals.append(ReconciliationSignal(
-                method="R6",
-                source_entity=resource_id,
-                target_entity=team_id,
-                confidence=round(confidence, 3),
-                signals=[f"proportional:{team_id}:{proportion:.2f}"],
-                feature_values={
-                    "allocation_weight": round(proportion, 3),
-                    "team_count": len(known_users),
-                },
-            ))
+            signals.append(
+                ReconciliationSignal(
+                    method="R6",
+                    source_entity=resource_id,
+                    target_entity=team_id,
+                    confidence=round(confidence, 3),
+                    signals=(f"proportional:{team_id}:{proportion:.2f}",),
+                    feature_values={
+                        "allocation_weight": round(proportion, 3),
+                        "team_count": len(known_users),
+                    },
+                )
+            )
 
         return signals

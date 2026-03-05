@@ -8,7 +8,7 @@ were correct when validated against ground truth.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, Field
@@ -18,8 +18,8 @@ class ConfidenceTier(StrEnum):
     """Operational confidence thresholds (Section 5.1)."""
 
     CHARGEBACK_READY = "chargeback_ready"  # >= 0.80
-    PROVISIONAL = "provisional"             # 0.50 - 0.79
-    ESTIMATED = "estimated"                 # < 0.50
+    PROVISIONAL = "provisional"  # 0.50 - 0.79
+    ESTIMATED = "estimated"  # < 0.50
 
 
 class CalibrationCurve(BaseModel):
@@ -42,7 +42,7 @@ class CalibrationCurve(BaseModel):
         default=None,
         description="KS distance from warm-start curve (triggers transition at > 0.15)",
     )
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     uncertainty_band: tuple[float, float] | None = Field(
         default=None,
         description="Bootstrap confidence interval when sample_count < 200",
@@ -65,7 +65,7 @@ class GroundTruthLabel(BaseModel):
     predicted_confidence: float
     method_used: str
     was_correct: bool
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class EvidenceCombinationResult(BaseModel):

@@ -27,4 +27,3 @@ Core value:
 - CI, CodeQL, dependency review, Dependabot configured.
 - Security policy and private vulnerability intake enabled.
 - Staging and production environments configured for deployment gates.
-

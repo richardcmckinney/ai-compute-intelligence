@@ -8,12 +8,12 @@ and utility factories for common test scenarios.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from aci.config import PlatformConfig
 from aci.confidence.calibration import CalibrationEngine
+from aci.config import PlatformConfig
 from aci.core.event_bus import InMemoryEventBus
 from aci.equivalence.verifier import EquivalenceClass, EquivalenceVerifier
 from aci.graph.store import GraphStore
@@ -26,13 +26,13 @@ from aci.models.graph import EdgeProvenance, EdgeType, GraphEdge, GraphNode, Nod
 from aci.policy.engine import PolicyEngine
 from aci.trac.calculator import TRACCalculator
 
-
-NOW = datetime(2026, 2, 8, 14, 23, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 2, 8, 14, 23, 0, tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------
 # Configuration fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def config() -> PlatformConfig:
@@ -42,6 +42,7 @@ def config() -> PlatformConfig:
 # ---------------------------------------------------------------------------
 # Core engine fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def event_bus() -> InMemoryEventBus:
@@ -82,12 +83,14 @@ def policy_engine() -> PolicyEngine:
 def equivalence_verifier(config: PlatformConfig) -> EquivalenceVerifier:
     verifier = EquivalenceVerifier(config.equivalence)
     # Register a sample equivalence class (Section 6.2 example).
-    verifier.register_class(EquivalenceClass(
-        class_id="customer-support-chat",
-        name="Customer Support Chat",
-        approved_models=["gpt-4o", "gpt-4o-mini", "claude-3-haiku"],
-        use_case="Customer-facing chat support",
-    ))
+    verifier.register_class(
+        EquivalenceClass(
+            class_id="customer-support-chat",
+            name="Customer Support Chat",
+            approved_models=["gpt-4o", "gpt-4o-mini", "claude-3-haiku"],
+            use_case="Customer-facing chat support",
+        )
+    )
     return verifier
 
 
@@ -111,6 +114,7 @@ def materializer(
 # Sample data: worked example from Patent Spec Section 13.1
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def fraud_team_graph(graph_store: GraphStore) -> GraphStore:
     """
@@ -125,8 +129,14 @@ def fraud_team_graph(graph_store: GraphStore) -> GraphStore:
             label="fraud-v2",
             properties={"arn": "arn:aws:sagemaker:us-east-1:...:endpoint/fraud-v2"},
         ),
-        GraphNode(node_id="deploy:fraud-prod-42", node_type=NodeType.DEPLOYMENT, label="deploy-fraud-model-prod"),
-        GraphNode(node_id="repo:co/fraud-model-v2", node_type=NodeType.REPOSITORY, label="fraud-model-v2"),
+        GraphNode(
+            node_id="deploy:fraud-prod-42",
+            node_type=NodeType.DEPLOYMENT,
+            label="deploy-fraud-model-prod",
+        ),
+        GraphNode(
+            node_id="repo:co/fraud-model-v2", node_type=NodeType.REPOSITORY, label="fraud-model-v2"
+        ),
         GraphNode(node_id="person:jdoe@company.com", node_type=NodeType.PERSON, label="Jane Doe"),
         GraphNode(node_id="team:ml-fraud", node_type=NodeType.TEAM, label="ML-Fraud"),
         GraphNode(node_id="cc:CC-4521", node_type=NodeType.COST_CENTER, label="CC-4521"),
@@ -144,15 +154,17 @@ def fraud_team_graph(graph_store: GraphStore) -> GraphStore:
         ("team:ml-fraud", "cc:CC-4521", EdgeType.BUDGETED_UNDER),
     ]
     for from_id, to_id, etype in edges:
-        graph_store.add_edge(GraphEdge(
-            edge_type=etype,
-            from_id=from_id,
-            to_id=to_id,
-            confidence=1.0,
-            weight=1.0,
-            valid_from=NOW - timedelta(days=30),
-            provenance=EdgeProvenance(source="cicd", method="R1"),
-        ))
+        graph_store.add_edge(
+            GraphEdge(
+                edge_type=etype,
+                from_id=from_id,
+                to_id=to_id,
+                confidence=1.0,
+                weight=1.0,
+                valid_from=NOW - timedelta(days=30),
+                provenance=EdgeProvenance(source="cicd", method="R1"),
+            )
+        )
 
     return graph_store
 
@@ -191,6 +203,7 @@ def populated_index(
 # ---------------------------------------------------------------------------
 # Event factories
 # ---------------------------------------------------------------------------
+
 
 def make_inference_event(
     model: str = "gpt-4o",

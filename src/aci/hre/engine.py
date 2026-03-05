@@ -14,7 +14,7 @@ from __future__ import annotations
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
-from datetime import datetime
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -34,6 +34,9 @@ from aci.models.attribution import (
     ExplanationArtifact,
     FractionalAttribution,
 )
+
+if TYPE_CHECKING:
+    from datetime import datetime
 
 logger = structlog.get_logger()
 
@@ -58,6 +61,8 @@ class ReconciliationContext:
     """
 
     def __init__(self) -> None:
+        self.tenant_id: str = "default"
+
         # R1: Direct identifier mappings (api_key -> person, arn -> service, etc.).
         self.identity_mappings: dict[str, str] = {}
 
@@ -124,7 +129,7 @@ class HeuristicReconciliationEngine:
         5. Produce an AttributionResult with explanation artifact.
         """
         started = time.monotonic()
-        cache_key = f"{entity_type}:{entity_id}"
+        cache_key = f"{context.tenant_id}:{entity_type}:{entity_id}"
         cached = self._get_cached(cache_key)
         if cached is not None:
             return cached
@@ -163,7 +168,9 @@ class HeuristicReconciliationEngine:
         if r3_signal is not None:
             probabilistic_signals.append(r3_signal)
 
-        historical = context.historical_attributions[-self.execution_config.max_historical_signals :]
+        historical = context.historical_attributions[
+            -self.execution_config.max_historical_signals :
+        ]
         r4_signal = self.r4.resolve(entity_id, historical)
         if r4_signal is not None:
             probabilistic_signals.append(r4_signal)
@@ -203,10 +210,10 @@ class HeuristicReconciliationEngine:
                 if self._exceeded_budget(started):
                     break
                 combination_input = [(s.method, s.confidence) for s in cluster]
-                result = combine_evidence(combination_input, self.combination_config)
+                combination_result = combine_evidence(combination_input, self.combination_config)
 
-                if result.combined_confidence > best_confidence:
-                    best_confidence = result.combined_confidence
+                if combination_result.combined_confidence > best_confidence:
+                    best_confidence = combination_result.combined_confidence
                     best_target = target
                     best_cluster = cluster
 
@@ -327,18 +334,20 @@ class HeuristicReconciliationEngine:
     def _build_alternatives(
         target_signals: dict[str, list[ReconciliationSignal]],
         best_target: str,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Build alternatives_considered for explanation artifact."""
-        alternatives = []
+        alternatives: list[dict[str, Any]] = []
         for target, cluster in target_signals.items():
             if target == best_target:
                 continue
             best_conf = max(s.confidence for s in cluster)
-            alternatives.append({
-                "team_id": target,
-                "confidence": best_conf,
-                "methods": [s.method for s in cluster],
-            })
+            alternatives.append(
+                {
+                    "team_id": target,
+                    "confidence": best_conf,
+                    "methods": [s.method for s in cluster],
+                }
+            )
         return sorted(alternatives, key=lambda x: x["confidence"], reverse=True)
 
     @staticmethod
@@ -347,7 +356,7 @@ class HeuristicReconciliationEngine:
         primary_signal: ReconciliationSignal,
         all_signals: list[ReconciliationSignal],
         combined_confidence: float,
-        alternatives: list[dict] | None = None,
+        alternatives: list[dict[str, Any]] | None = None,
         fractional: list[FractionalAttribution] | None = None,
     ) -> AttributionResult:
         """Construct the full AttributionResult with explanation artifact."""
@@ -376,9 +385,7 @@ class HeuristicReconciliationEngine:
                 }
                 for s in all_signals
             ],
-            feature_values={
-                s.method: s.feature_values for s in all_signals
-            },
+            feature_values={s.method: s.feature_values for s in all_signals},
             alternatives_considered=alternatives or [],
         )
 

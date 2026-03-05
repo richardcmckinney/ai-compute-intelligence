@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import statistics
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import structlog
 
@@ -116,7 +116,7 @@ class EquivalenceVerifier:
             equivalence_class_id=class_id,
             mode=EquivalenceMode.POLICY,
             is_equivalent=is_equivalent,
-            expires_at=datetime.now(timezone.utc) + timedelta(days=self.config.ttl_days),
+            expires_at=datetime.now(UTC) + timedelta(days=self.config.ttl_days),
         )
         self._cache(verification)
         return verification
@@ -142,7 +142,9 @@ class EquivalenceVerifier:
                 count=len(evaluation_results),
                 required=self.config.min_shadow_samples,
             )
-            return self._fail_safe(source_model, candidate_model, class_id, EquivalenceMode.EMPIRICAL)
+            return self._fail_safe(
+                source_model, candidate_model, class_id, EquivalenceMode.EMPIRICAL
+            )
 
         # Compute aggregate quality scores.
         baseline_scores = [r.baseline_score for r in evaluation_results]
@@ -176,7 +178,7 @@ class EquivalenceVerifier:
             candidate_score=round(candidate_mean, 4),
             quality_delta=round(candidate_mean - baseline_mean, 4),
             confidence_interval=(round(ci_lower, 4), round(ci_upper, 4)),
-            expires_at=datetime.now(timezone.utc) + timedelta(days=self.config.ttl_days),
+            expires_at=datetime.now(UTC) + timedelta(days=self.config.ttl_days),
         )
         self._cache(verification)
         return verification
@@ -224,7 +226,7 @@ class EquivalenceVerifier:
             baseline_score=round(baseline_mean, 4),
             candidate_score=round(candidate_mean, 4),
             quality_delta=round(candidate_mean - baseline_mean, 4),
-            expires_at=datetime.now(timezone.utc) + timedelta(days=self.config.ttl_days),
+            expires_at=datetime.now(UTC) + timedelta(days=self.config.ttl_days),
         )
         self._cache(verification)
         return verification
@@ -240,7 +242,7 @@ class EquivalenceVerifier:
         verification = self.verifications.get(key)
         if verification is None:
             return None
-        if verification.expires_at and verification.expires_at < datetime.now(timezone.utc):
+        if verification.expires_at and verification.expires_at < datetime.now(UTC):
             del self.verifications[key]
             return None
         return verification

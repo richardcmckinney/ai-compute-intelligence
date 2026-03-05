@@ -26,14 +26,13 @@ from aci.models.confidence import (
     IndividualEvidence,
 )
 
-
 # Known signal correlations: method pairs that are likely correlated.
 # These are initial defaults; the system estimates actual correlation from
 # mutual information on historical data and adjusts per deployment.
 DEFAULT_CORRELATED_PAIRS: dict[tuple[str, str], float] = {
-    ("R3", "R4"): 0.5,   # Naming convention + historical pattern both derive from naming.
-    ("R2", "R5"): 0.4,   # Temporal + service account share temporal signals.
-    ("R4", "R5"): 0.3,   # Historical + service account share deployment history.
+    ("R3", "R4"): 0.5,  # Naming convention + historical pattern both derive from naming.
+    ("R2", "R5"): 0.4,  # Temporal + service account share temporal signals.
+    ("R4", "R5"): 0.3,  # Historical + service account share deployment history.
 }
 
 
@@ -106,7 +105,7 @@ def combine_evidence(
     penalties: list[DependencyPenalty] = []
     weights: dict[str, float] = {}
 
-    for method, conf in signals:
+    for method, _confidence in signals:
         weights[method] = 1.0  # Start fully independent.
 
     for i, (method_a, _) in enumerate(signals):
@@ -125,12 +124,14 @@ def combine_evidence(
                 else:
                     weights[method_b] = min(weights[method_b], discount)
 
-                penalties.append(DependencyPenalty(
-                    method_a=method_a,
-                    method_b=method_b,
-                    discount_factor=discount,
-                    rationale="correlated_signals",
-                ))
+                penalties.append(
+                    DependencyPenalty(
+                        method_a=method_a,
+                        method_b=method_b,
+                        discount_factor=discount,
+                        rationale="correlated_signals",
+                    )
+                )
 
     # Step 2: Apply diminishing returns (from 3rd signal onward).
     # Two independent signals combine at full weight. The diminishing
@@ -156,14 +157,16 @@ def combine_evidence(
         w = weights.get(method, 1.0)
         d = diminishing_multipliers[idx]
         effective_conf = conf * w * d
-        product_term *= (1.0 - effective_conf)
+        product_term *= 1.0 - effective_conf
 
-        individual.append(IndividualEvidence(
-            method=method,
-            raw_confidence=conf,
-            calibrated_confidence=conf,
-            weight=round(w * d, 4),
-        ))
+        individual.append(
+            IndividualEvidence(
+                method=method,
+                raw_confidence=conf,
+                calibrated_confidence=conf,
+                weight=round(w * d, 4),
+            )
+        )
 
     combined = 1.0 - product_term
     capped = combined > config.cap

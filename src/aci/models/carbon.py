@@ -4,21 +4,21 @@ Carbon ledger models (Patent Spec Section 8) and TRAC (Section 7).
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-
 # ---------------------------------------------------------------------------
 # Carbon Ledger (Section 8)
 # ---------------------------------------------------------------------------
 
+
 class CarbonMethodologyLayer(StrEnum):
-    BASELINE = "baseline"   # Layer 1: spend-based, +/- 50-100%
-    STANDARD = "standard"   # Layer 2: activity-based, +/- 15-30%
-    PREMIUM = "premium"     # Layer 3: instrumented, +/- 5-15%
+    BASELINE = "baseline"  # Layer 1: spend-based, +/- 50-100%
+    STANDARD = "standard"  # Layer 2: activity-based, +/- 15-30%
+    PREMIUM = "premium"  # Layer 3: instrumented, +/- 5-15%
 
 
 class AccountingMethod(StrEnum):
@@ -27,8 +27,8 @@ class AccountingMethod(StrEnum):
 
 
 class GHGScope(StrEnum):
-    SCOPE_2 = "scope_2"   # Direct cloud compute.
-    SCOPE_3 = "scope_3"   # Third-party API inference (Cat. 1 purchased services).
+    SCOPE_2 = "scope_2"  # Direct cloud compute.
+    SCOPE_3 = "scope_3"  # Third-party API inference (Cat. 1 purchased services).
 
 
 class CarbonCalculationReceipt(BaseModel):
@@ -64,14 +64,16 @@ class CarbonCalculationReceipt(BaseModel):
     # For Scope 3 third-party API calls (Section 8.3).
     provider_name: str = ""
     provider_emission_factor: float | None = Field(
-        default=None, description="gCO2e per token for third-party API",
+        default=None,
+        description="gCO2e per token for third-party API",
     )
     provider_factor_source: str = ""  # published_report | benchmark | estimated
 
     # Immutability metadata.
-    computed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    computed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     superseded_by: str | None = Field(
-        default=None, description="Receipt ID of superseding calculation",
+        default=None,
+        description="Receipt ID of superseding calculation",
     )
 
     model_config = {"frozen": True}
@@ -110,6 +112,7 @@ class CarbonLedgerEntry(BaseModel):
 # TRAC Metric (Section 7)
 # ---------------------------------------------------------------------------
 
+
 class TRACResult(BaseModel):
     """
     Total Risk-Adjusted Cost computation result.
@@ -136,12 +139,13 @@ class TRACResult(BaseModel):
     carbon_pct_of_trac: float = Field(description="Carbon as % of TRAC")
     risk_pct_of_trac: float = Field(description="Confidence risk as % of TRAC")
 
-    computed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    computed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 # ---------------------------------------------------------------------------
 # Policy Models (Section 6.2, 6.4)
 # ---------------------------------------------------------------------------
+
 
 class PolicyType(StrEnum):
     MODEL_ALLOWLIST = "model_allowlist"
@@ -155,9 +159,9 @@ class PolicyType(StrEnum):
 
 class EnforcementAction(StrEnum):
     ALLOW = "allow"
-    SOFT_STOP = "soft_stop"      # Alert + log, request proceeds.
-    HARD_STOP = "hard_stop"      # Block until approval.
-    REDIRECT = "redirect"         # Route to alternative model.
+    SOFT_STOP = "soft_stop"  # Alert + log, request proceeds.
+    HARD_STOP = "hard_stop"  # Block until approval.
+    REDIRECT = "redirect"  # Route to alternative model.
 
 
 class PolicyDefinition(BaseModel):
@@ -184,17 +188,18 @@ class PolicyEvaluationResult(BaseModel):
     action: EnforcementAction
     violated: bool
     details: str = ""
-    evaluated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    evaluated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 # ---------------------------------------------------------------------------
 # Capability Equivalence (Section 6.2)
 # ---------------------------------------------------------------------------
 
+
 class EquivalenceMode(StrEnum):
-    POLICY = "policy"           # Mode 1: Admin-defined model families.
-    EMPIRICAL = "empirical"     # Mode 2a: Shadow evaluation harness.
-    JUDGE = "judge"             # Mode 2b: LLM-as-judge.
+    POLICY = "policy"  # Mode 1: Admin-defined model families.
+    EMPIRICAL = "empirical"  # Mode 2a: Shadow evaluation harness.
+    JUDGE = "judge"  # Mode 2b: LLM-as-judge.
     CONTRACTUAL = "contractual"  # Mode 3: Compliance boundary.
 
 
@@ -216,7 +221,7 @@ class EquivalenceVerification(BaseModel):
     confidence_interval: tuple[float, float] | None = None
 
     # TTL management.
-    verified_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    verified_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     expires_at: datetime | None = None
     model_version_hash: str = ""
 

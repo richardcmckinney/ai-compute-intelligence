@@ -52,6 +52,16 @@ class InterceptorConfig(BaseSettings):
     # Stale-while-revalidate: serve last known entry during refresh.
     stale_while_revalidate: bool = Field(default=True)
 
+    # Header enrichment budget controls.
+    max_enrichment_header_bytes: int = Field(
+        default=4096,
+        description="Max total bytes for generated enrichment headers",
+    )
+    max_header_value_length: int = Field(
+        default=512,
+        description="Max length of each generated header value",
+    )
+
 
 class ConfidenceConfig(BaseSettings):
     """Confidence governance configuration (Patent Spec Section 5)."""
@@ -67,7 +77,9 @@ class ConfidenceConfig(BaseSettings):
 
     # Default dependency discount for correlated signals (Section 5.3c).
     # Initial value; adjusted per method pair as ground truth accumulates.
-    default_dependency_discount: float = Field(default=0.5, description="Correlated signal discount")
+    default_dependency_discount: float = Field(
+        default=0.5, description="Correlated signal discount"
+    )
 
     # Operational thresholds (Section 5.1).
     chargeback_threshold: float = Field(default=0.80, description="Min confidence for chargeback")
@@ -86,7 +98,7 @@ class ConfidenceConfig(BaseSettings):
     decay_rate: float = Field(default=0.01, description="Daily decay factor")
 
     @model_validator(mode="after")
-    def _validate_threshold_ordering(self) -> "ConfidenceConfig":
+    def _validate_threshold_ordering(self) -> ConfidenceConfig:
         if self.chargeback_threshold <= self.provisional_threshold:
             raise ValueError("chargeback_threshold must be greater than provisional_threshold")
         return self
@@ -179,6 +191,32 @@ class FBPConfig(BaseSettings):
     max_churn_rate: float = Field(default=0.20, description="Max month-over-month churn")
 
 
+class AuthConfig(BaseSettings):
+    """Service-to-service API authentication configuration."""
+
+    model_config = {"env_prefix": "ACI_AUTH_"}
+
+    enabled: bool = Field(default=True, description="Enable bearer-token auth for API routes")
+    allow_dev_bypass: bool = Field(
+        default=True,
+        description="Allow unauthenticated requests in development only",
+    )
+    jwt_algorithm: str = Field(default="HS256", description="JWT signing algorithm")
+    jwt_issuer: str = Field(default="aci-control-plane", description="Expected JWT issuer")
+    jwt_audience: str = Field(default="aci-api", description="Expected JWT audience")
+    jwt_hs256_secret: str = Field(
+        default="dev-only-secret",
+        description="Shared HMAC secret for HS256",
+    )
+    jwt_public_key_pem: str = Field(
+        default="",
+        description="PEM-encoded public key for asymmetric JWT validation",
+    )
+    required_scope: str = Field(default="aci.api", description="Required service scope")
+    tenant_claim: str = Field(default="tenant_id", description="JWT claim holding tenant id")
+    clock_skew_seconds: int = Field(default=60, description="Allowed JWT clock skew in seconds")
+
+
 class PlatformConfig(BaseSettings):
     """Top-level platform configuration aggregating all subsystem configs."""
 
@@ -191,6 +229,22 @@ class PlatformConfig(BaseSettings):
         default="all",
         description="Runtime role (all|gateway|processor)",
     )
+    api_ingest_rate_limit_per_minute: int = Field(
+        default=600,
+        description="Per-caller ingestion request budget per minute",
+    )
+    api_ingest_max_batch_size: int = Field(
+        default=1000,
+        description="Maximum accepted events per batch ingestion request",
+    )
+    api_cors_allowed_origins: str = Field(
+        default="",
+        description="Comma-separated CORS allowlist for browser clients",
+    )
+    api_cors_allow_credentials: bool = Field(
+        default=False,
+        description="Whether CORS responses allow credentials",
+    )
 
     # Subsystem configs.
     interceptor: InterceptorConfig = Field(default_factory=InterceptorConfig)
@@ -199,6 +253,7 @@ class PlatformConfig(BaseSettings):
     carbon: CarbonConfig = Field(default_factory=CarbonConfig)
     equivalence: EquivalenceConfig = Field(default_factory=EquivalenceConfig)
     fbp: FBPConfig = Field(default_factory=FBPConfig)
+    auth: AuthConfig = Field(default_factory=AuthConfig)
 
     # Infrastructure endpoints.
     index_max_entries: int = Field(
@@ -236,7 +291,7 @@ class PlatformConfig(BaseSettings):
     neo4j_password: str = Field(default="", description="Neo4j password")
 
     @model_validator(mode="after")
-    def _validate_runtime_settings(self) -> "PlatformConfig":
+    def _validate_runtime_settings(self) -> PlatformConfig:
         valid_roles = {"all", "gateway", "processor"}
         if self.runtime_role not in valid_roles:
             raise ValueError(f"runtime_role must be one of {sorted(valid_roles)}")
@@ -249,16 +304,49 @@ class PlatformConfig(BaseSettings):
         if self.index_backend not in valid_index_backends:
             raise ValueError(f"index_backend must be one of {sorted(valid_index_backends)}")
 
+        if self.api_ingest_rate_limit_per_minute <= 0:
+            raise ValueError("api_ingest_rate_limit_per_minute must be > 0")
+        if self.api_ingest_max_batch_size <= 0:
+            raise ValueError("api_ingest_max_batch_size must be > 0")
+
         valid_circuit_backends = {"local", "redis"}
         if self.interceptor.circuit_state_backend not in valid_circuit_backends:
             raise ValueError(
-                "interceptor.circuit_state_backend must be one of "
-                f"{sorted(valid_circuit_backends)}"
+                f"interceptor.circuit_state_backend must be one of {sorted(valid_circuit_backends)}"
             )
 
         production_like = self.environment.lower() in {"production", "staging"}
         if production_like and not self.neo4j_password:
             raise ValueError("neo4j_password must be configured in production/staging")
+
+        non_production_envs = {"development", "dev", "test", "testing", "local"}
+        env_name = self.environment.lower()
+        if production_like and not self.auth.enabled:
+            raise ValueError("auth.enabled must be true in production/staging")
+        if self.auth.allow_dev_bypass and env_name not in non_production_envs:
+            raise ValueError(
+                "auth.allow_dev_bypass may only be enabled in non-production environments"
+            )
+
+        algorithm = self.auth.jwt_algorithm.upper()
+        if self.auth.enabled:
+            bypass_allowed = env_name in non_production_envs and self.auth.allow_dev_bypass
+            if algorithm.startswith("HS") and not self.auth.jwt_hs256_secret and not bypass_allowed:
+                raise ValueError("auth.jwt_hs256_secret is required for HS* auth algorithms")
+            if (
+                algorithm.startswith("RS")
+                and not self.auth.jwt_public_key_pem
+                and not bypass_allowed
+            ):
+                raise ValueError("auth.jwt_public_key_pem is required for RS* auth algorithms")
+
+        if production_like and algorithm.startswith("HS"):
+            weak_defaults = {"", "dev-only-secret"}
+            if self.auth.jwt_hs256_secret in weak_defaults:
+                raise ValueError(
+                    "auth.jwt_hs256_secret must be set to a strong non-default "
+                    "value in production/staging"
+                )
 
         if self.event_bus_backend == "kafka" and not self.kafka_bootstrap:
             raise ValueError("kafka_bootstrap must be configured when event_bus_backend='kafka'")
@@ -271,5 +359,12 @@ class PlatformConfig(BaseSettings):
             raise ValueError(
                 "redis_url must be configured for redis index/circuit state or kafka dedup backend"
             )
+
+        if production_like and (
+            self.index_backend == "redis"
+            or self.interceptor.circuit_state_backend == "redis"
+            or self.event_bus_backend == "kafka"
+        ) and not self.redis_url.startswith("rediss://"):
+            raise ValueError("redis_url must use rediss:// in production/staging")
 
         return self

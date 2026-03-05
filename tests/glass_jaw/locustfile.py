@@ -24,7 +24,7 @@ from locust import HttpUser, between, task
 class InterceptorUser(HttpUser):
     """Simulates inference requests hitting the interceptor endpoint."""
 
-    wait_time = between(0.001, 0.01)  # High-frequency requests.
+    wait_time = between(0.001, 0.01)  # type: ignore[no-untyped-call]
 
     MODELS = ["gpt-4o", "gpt-4o-mini", "claude-3-haiku", "claude-3.5-sonnet"]
     SERVICES = [f"service-{i}" for i in range(1000)]

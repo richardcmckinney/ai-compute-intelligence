@@ -21,7 +21,6 @@ from aci.models.carbon import (
     GHGScope,
 )
 
-
 # Energy-per-inference benchmarks from AI Energy Score and published model cards.
 # Units: kWh per 1K tokens (combined input+output weighted estimate).
 MODEL_ENERGY_BENCHMARKS: dict[str, float] = {
@@ -42,24 +41,24 @@ SPEND_BASED_FACTOR_KG_PER_USD = 0.0004
 # Grid carbon intensity by cloud region (gCO2e/kWh).
 # Annual averages; Layer 3 uses hourly marginal intensity.
 GRID_INTENSITY: dict[str, float] = {
-    "us-east-1": 379.0,      # Virginia (PJM mix).
-    "us-west-2": 87.0,       # Oregon (hydro-heavy).
-    "eu-west-1": 296.0,      # Ireland.
-    "eu-central-1": 338.0,   # Frankfurt.
-    "eu-north-1": 29.0,      # Stockholm (Nordic hydro/nuclear).
+    "us-east-1": 379.0,  # Virginia (PJM mix).
+    "us-west-2": 87.0,  # Oregon (hydro-heavy).
+    "eu-west-1": 296.0,  # Ireland.
+    "eu-central-1": 338.0,  # Frankfurt.
+    "eu-north-1": 29.0,  # Stockholm (Nordic hydro/nuclear).
     "ap-northeast-1": 462.0,  # Tokyo.
-    "ap-south-1": 708.0,     # Mumbai (coal-heavy grid).
-    "eastus": 379.0,          # Azure East US.
-    "westus2": 87.0,          # Azure West US 2.
-    "us-central1": 442.0,    # GCP Iowa.
+    "ap-south-1": 708.0,  # Mumbai (coal-heavy grid).
+    "eastus": 379.0,  # Azure East US.
+    "westus2": 87.0,  # Azure West US 2.
+    "us-central1": 442.0,  # GCP Iowa.
 }
 
 # Provider-level emission factors for third-party API inference (Section 8.3).
 # gCO2e per 1K tokens. Uncertainty: +/- 40-80%.
 PROVIDER_EMISSION_FACTORS: dict[str, float] = {
-    "openai": 0.80,     # Estimated from Azure energy mix + model benchmarks.
+    "openai": 0.80,  # Estimated from Azure energy mix + model benchmarks.
     "anthropic": 0.65,  # GCP-heavy infrastructure, lower grid intensity.
-    "google": 0.55,     # High CFE percentage in many regions.
+    "google": 0.55,  # High CFE percentage in many regions.
 }
 
 
@@ -103,7 +102,11 @@ class CarbonCalculator:
         """
         total_tokens = inference_count * tokens_per_inference
         return self._layer2(
-            workload_id, model, region, total_tokens, accounting_method,
+            workload_id,
+            model,
+            region,
+            total_tokens,
+            accounting_method,
             measured_gpu_seconds=measured_gpu_seconds,
         )
 
@@ -144,20 +147,31 @@ class CarbonCalculator:
         # Layer 3: Instrumented measurement.
         if measured_kwh is not None:
             return self._layer3(
-                workload_id, measured_kwh, region, accounting_method,
+                workload_id,
+                measured_kwh,
+                region,
+                accounting_method,
             )
 
         # Layer 2: Activity-based with model benchmarks.
         if model in MODEL_ENERGY_BENCHMARKS and total_tokens > 0 and is_self_hosted:
             return self._layer2(
-                workload_id, model, region, total_tokens, accounting_method,
+                workload_id,
+                model,
+                region,
+                total_tokens,
+                accounting_method,
                 measured_gpu_seconds=measured_gpu_seconds,
             )
 
         # Layer 1.5: Third-party API inference (Section 8.3).
         if provider.lower() in PROVIDER_EMISSION_FACTORS and total_tokens > 0:
             return self._layer1_5(
-                workload_id, model, provider, total_tokens, accounting_method,
+                workload_id,
+                model,
+                provider,
+                total_tokens,
+                accounting_method,
             )
 
         # Layer 1: Spend-based estimation.
@@ -199,7 +213,9 @@ class CarbonCalculator:
         Scope 3 Category 1 (purchased services).
         """
         factor = PROVIDER_EMISSION_FACTORS.get(provider.lower(), 0.70)
-        emissions = factor * total_tokens / 1000.0 / 1000.0  # factor is per 1K tokens, result in kg.
+        emissions = (
+            factor * total_tokens / 1000.0 / 1000.0
+        )  # factor is per 1K tokens, result in kg.
 
         return CarbonCalculationReceipt(
             receipt_id=str(uuid.uuid4()),
@@ -257,7 +273,9 @@ class CarbonCalculator:
             duration_source = f"estimated ({self.config.tokens_per_gpu_second:.0f} tokens/GPU-sec)"
 
         gpu_hours = gpu_seconds / 3600.0
-        lifetime_hours = self.config.hardware_lifetime_years * 365.25 * 24 * self.config.hardware_utilization
+        lifetime_hours = (
+            self.config.hardware_lifetime_years * 365.25 * 24 * self.config.hardware_utilization
+        )
         embodied_per_hour = self.config.embodied_carbon_manufacturing_kg / lifetime_hours
         embodied_carbon = embodied_per_hour * gpu_hours
 

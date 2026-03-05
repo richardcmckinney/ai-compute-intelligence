@@ -7,8 +7,7 @@ combination engine and the full HRE orchestrator.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
+from datetime import UTC, datetime, timedelta
 
 from aci.hre.combination import CombinationConfig, combine_evidence, combine_noisy_or_simple
 from aci.hre.engine import HeuristicReconciliationEngine, ReconciliationContext
@@ -21,10 +20,10 @@ from aci.hre.methods import (
     R6ProportionalAllocation,
 )
 
-
 # ---------------------------------------------------------------------------
 # R1: Direct Match
 # ---------------------------------------------------------------------------
+
 
 class TestR1DirectMatch:
     """R1 produces confidence 1.0 for exact identifier matches."""
@@ -61,6 +60,7 @@ class TestR1DirectMatch:
 # R2: Temporal Correlation
 # ---------------------------------------------------------------------------
 
+
 class TestR2TemporalCorrelation:
     """R2 produces confidence 0.70-0.95 based on temporal proximity."""
 
@@ -68,7 +68,7 @@ class TestR2TemporalCorrelation:
         self.r2 = R2TemporalCorrelation(max_window_seconds=300)
 
     def test_close_temporal_match(self) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         candidates = [(now - timedelta(seconds=10), "team-nlp", "cloudtrail")]
         result = self.r2.resolve(now, "endpoint-x", candidates)
         assert result is not None
@@ -76,20 +76,20 @@ class TestR2TemporalCorrelation:
         assert result.target_entity == "team-nlp"
 
     def test_distant_temporal_match(self) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         candidates = [(now - timedelta(seconds=280), "team-nlp", "cloudtrail")]
         result = self.r2.resolve(now, "endpoint-x", candidates)
         assert result is not None
         assert result.confidence < 0.5  # Distant, low confidence.
 
     def test_outside_window(self) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         candidates = [(now - timedelta(seconds=600), "team-nlp", "cloudtrail")]
         result = self.r2.resolve(now, "endpoint-x", candidates)
         assert result is None
 
     def test_competing_events_reduce_confidence(self) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         candidates = [
             (now - timedelta(seconds=30), "team-a", "cloudtrail"),
             (now - timedelta(seconds=45), "team-b", "cloudtrail"),
@@ -100,10 +100,11 @@ class TestR2TemporalCorrelation:
         # Multiple competing events should reduce confidence.
         single_candidate = [(now - timedelta(seconds=30), "team-a", "cloudtrail")]
         single_result = self.r2.resolve(now, "endpoint-x", single_candidate)
+        assert single_result is not None
         assert result.confidence < single_result.confidence
 
     def test_empty_candidates(self) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = self.r2.resolve(now, "endpoint-x", [])
         assert result is None
 
@@ -111,6 +112,7 @@ class TestR2TemporalCorrelation:
 # ---------------------------------------------------------------------------
 # R3: Naming Convention
 # ---------------------------------------------------------------------------
+
 
 class TestR3NamingConvention:
     """R3 uses string similarity against known team naming patterns."""
@@ -150,6 +152,7 @@ class TestR3NamingConvention:
 # R4: Historical Pattern
 # ---------------------------------------------------------------------------
 
+
 class TestR4HistoricalPattern:
     """R4 uses Bayesian priors from past attributions."""
 
@@ -184,6 +187,7 @@ class TestR4HistoricalPattern:
 # R5: Service Account Resolution
 # ---------------------------------------------------------------------------
 
+
 class TestR5ServiceAccountResolution:
     """R5 resolves shared service accounts (confidence 0.50-0.75)."""
 
@@ -191,7 +195,7 @@ class TestR5ServiceAccountResolution:
         self.r5 = R5ServiceAccountResolution()
 
     def test_recent_deployer_strongest(self) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = self.r5.resolve(
             service_account="svc-analytics",
             deployment_owners=[
@@ -210,7 +214,7 @@ class TestR5ServiceAccountResolution:
         assert result is None
 
     def test_confidence_capped_at_075(self) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = self.r5.resolve(
             "svc-owned",
             [("team-x", now - timedelta(hours=1))],
@@ -224,6 +228,7 @@ class TestR5ServiceAccountResolution:
 # ---------------------------------------------------------------------------
 # R6: Proportional Allocation
 # ---------------------------------------------------------------------------
+
 
 class TestR6ProportionalAllocation:
     """R6 distributes costs proportionally (lowest confidence)."""
@@ -261,6 +266,7 @@ class TestR6ProportionalAllocation:
 # ---------------------------------------------------------------------------
 # Evidence Combination (Noisy-OR)
 # ---------------------------------------------------------------------------
+
 
 class TestEvidenceCombination:
     """Tests for modified noisy-OR combination (Section 5.3)."""
@@ -343,6 +349,7 @@ class TestEvidenceCombination:
 # Full HRE Orchestrator
 # ---------------------------------------------------------------------------
 
+
 class TestHREOrchestrator:
     """Integration tests for the full reconciliation pipeline."""
 
@@ -357,15 +364,16 @@ class TestHREOrchestrator:
         result = self.hre.resolve(
             entity_id="fraud-v2-endpoint",
             entity_type="cloud_resource",
-            event_time=datetime.now(timezone.utc),
+            event_time=datetime.now(UTC),
             context=ctx,
         )
         assert result.combined_confidence == 1.0
+        assert result.explanation is not None
         assert result.explanation.target_entity == "team-ml-fraud"
 
     def test_probabilistic_combination(self) -> None:
         """Multiple weak signals should combine to moderate confidence."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         ctx = ReconciliationContext()
         ctx.temporal_events = [
             (now - timedelta(seconds=60), "team-nlp", "cloudtrail"),
@@ -390,7 +398,7 @@ class TestHREOrchestrator:
         result = self.hre.resolve(
             entity_id="unknown-resource",
             entity_type="cloud_resource",
-            event_time=datetime.now(timezone.utc),
+            event_time=datetime.now(UTC),
             context=ctx,
         )
         assert result.combined_confidence > 0.0
@@ -402,15 +410,16 @@ class TestHREOrchestrator:
         result = self.hre.resolve(
             entity_id="mystery-resource",
             entity_type="cloud_resource",
-            event_time=datetime.now(timezone.utc),
+            event_time=datetime.now(UTC),
             context=ctx,
         )
         assert result.combined_confidence == 0.0
+        assert result.explanation is not None
         assert result.explanation.target_entity == "unresolved"
 
     def test_explanation_contains_alternatives(self) -> None:
         """When multiple targets are possible, alternatives are recorded."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         ctx = ReconciliationContext()
         # R2 points to team-a, R3 points to team-b.
         ctx.temporal_events = [

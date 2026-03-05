@@ -11,9 +11,18 @@ billed cost and confidence risk at current carbon prices.
 from __future__ import annotations
 
 import math
+from typing import NotRequired, TypedDict
 
 from aci.config import ConfidenceConfig, TRACConfig
 from aci.models.carbon import TRACResult
+
+
+class TRACWorkloadInput(TypedDict):
+    workload_id: str
+    billed_cost_usd: float
+    attribution_confidence: float
+    emissions_kg_co2e: NotRequired[float]
+    signal_age_days: NotRequired[float]
 
 
 class TRACCalculator:
@@ -69,9 +78,7 @@ class TRACCalculator:
         # Component 2: Confidence Risk Premium.
         # billed_cost * (1 - confidence) * risk_multiplier.
         risk_premium = (
-            billed_cost_usd
-            * (1.0 - effective_confidence)
-            * self.trac_config.risk_multiplier
+            billed_cost_usd * (1.0 - effective_confidence) * self.trac_config.risk_multiplier
         )
 
         # TRAC = sum of all components.
@@ -97,7 +104,7 @@ class TRACCalculator:
 
     def compute_batch(
         self,
-        workloads: list[dict],
+        workloads: list[TRACWorkloadInput],
     ) -> list[TRACResult]:
         """Compute TRAC for multiple workloads."""
         return [

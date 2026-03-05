@@ -21,4 +21,3 @@
 2. Track conversion from advisory recommendations to accepted interventions.
 3. Publish repeatable deployment playbook with < 2 week time-to-first-value.
 4. Keep CI/security controls strict while avoiding workflow flakiness.
-

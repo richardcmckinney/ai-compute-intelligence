@@ -23,25 +23,34 @@ import asyncio
 import inspect
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import structlog
 
 from aci.config import InterceptorConfig
-from aci.index.materializer import AttributionIndexStore
 from aci.interceptor.circuit_breaker import CircuitBreaker, CircuitStateStore
 from aci.interceptor.shadow_warming import ShadowWarmer
-from aci.models.attribution import AttributionIndexEntry
 from aci.models.carbon import EnforcementAction, PolicyEvaluationResult
 from aci.models.events import DomainEvent, EventType
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable, Coroutine
+
+    from aci.index.materializer import AttributionIndexStore
+    from aci.models.attribution import AttributionIndexEntry
 
 logger = structlog.get_logger()
 
 
+class EventPublisher(Protocol):
+    def publish(self, event: DomainEvent) -> bool | Coroutine[Any, Any, bool]: ...
+
+
 class DeploymentMode(StrEnum):
     """Interceptor deployment modes (Section 6.4)."""
+
     PASSIVE = "passive"
     ADVISORY = "advisory"
     ACTIVE = "active"
@@ -49,6 +58,7 @@ class DeploymentMode(StrEnum):
 
 class InterceptionOutcome(StrEnum):
     """Possible outcomes of an interception decision."""
+
     PASSTHROUGH = "passthrough"
     ENRICHED = "enriched"
     REDIRECTED = "redirected"
@@ -62,6 +72,7 @@ class InterceptionOutcome(StrEnum):
 @dataclass
 class InterceptionRequest:
     """Incoming inference request to be intercepted."""
+
     request_id: str
     model: str
     provider: str = ""
@@ -71,13 +82,14 @@ class InterceptionRequest:
     estimated_cost_usd: float = 0.0
     headers: dict[str, str] = field(default_factory=dict)
     workload_id: str = ""
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     timestamp: float = field(default_factory=time.time)
 
 
 @dataclass
 class InterceptionResult:
     """Result of interceptor processing."""
+
     outcome: InterceptionOutcome
     request_id: str
     enrichment_headers: dict[str, str] = field(default_factory=dict)
@@ -107,8 +119,8 @@ class FailOpenInterceptor:
         index: AttributionIndexStore,
         config: InterceptorConfig | None = None,
         mode: DeploymentMode = DeploymentMode.ADVISORY,
-        event_bus: Any | None = None,
-        shadow_refresh_fn: Callable | None = None,
+        event_bus: EventPublisher | None = None,
+        shadow_refresh_fn: Callable[[str], Awaitable[None]] | None = None,
         circuit_state_store: CircuitStateStore | None = None,
     ) -> None:
         self.index = index
@@ -134,6 +146,7 @@ class FailOpenInterceptor:
         self.total_fail_open = 0
         self.total_redirected = 0
         self.total_cache_misses = 0
+        self._background_tasks: set[asyncio.Task[None]] = set()
 
     async def intercept(self, request: InterceptionRequest) -> InterceptionResult:
         """
@@ -146,7 +159,7 @@ class FailOpenInterceptor:
         start = time.monotonic()
 
         try:
-            return self._intercept_inner(request, start)
+            return await self._intercept_inner(request, start)
         except Exception as exc:
             elapsed_ms = (time.monotonic() - start) * 1000
             self.total_fail_open += 1
@@ -173,7 +186,7 @@ class FailOpenInterceptor:
                 shadow_event_logged=shadow_logged,
             )
 
-    def _intercept_inner(
+    async def _intercept_inner(
         self,
         request: InterceptionRequest,
         start: float,
@@ -209,15 +222,13 @@ class FailOpenInterceptor:
 
             # Shadow warming (Section 6.3): probabilistic background refresh.
             # Only one refresh runs at a time per workload ID.
-            if (
-                self._shadow_refresh_fn
-                and self.shadow_warmer.should_trigger_refresh(workload_id)
-            ):
+            if self._shadow_refresh_fn and self.shadow_warmer.should_trigger_refresh(workload_id):
                 try:
                     loop = asyncio.get_running_loop()
-                    loop.create_task(
+                    task = loop.create_task(
                         self.shadow_warmer.trigger_refresh(workload_id, self._shadow_refresh_fn)
                     )
+                    self._track_background_task(task)
                 except RuntimeError:
                     pass  # No running loop; skip background refresh.
 
@@ -275,7 +286,9 @@ class FailOpenInterceptor:
         elif self.mode == DeploymentMode.ADVISORY:
             headers = self._build_enrichment_headers(request, attribution, violations)
             has_violation = any(v.violated for v in violations)
-            outcome = InterceptionOutcome.SOFT_STOPPED if has_violation else InterceptionOutcome.ENRICHED
+            outcome = (
+                InterceptionOutcome.SOFT_STOPPED if has_violation else InterceptionOutcome.ENRICHED
+            )
             elapsed_ms = (time.monotonic() - start) * 1000
             self.circuit_breaker.record_success()
             self.total_enriched += 1
@@ -310,13 +323,15 @@ class FailOpenInterceptor:
 
         # Model allowlist.
         if attribution.model_allowlist and request.model not in attribution.model_allowlist:
-            violations.append(PolicyEvaluationResult(
-                policy_id="model_allowlist",
-                policy_name="Production Model Allowlist",
-                action=EnforcementAction.SOFT_STOP,
-                violated=True,
-                details=f"Model '{request.model}' not in allowlist",
-            ))
+            violations.append(
+                PolicyEvaluationResult(
+                    policy_id="model_allowlist",
+                    policy_name="Production Model Allowlist",
+                    action=EnforcementAction.SOFT_STOP,
+                    violated=True,
+                    details=f"Model '{request.model}' not in allowlist",
+                )
+            )
 
         # Budget ceiling (>90% utilized).
         if (
@@ -326,26 +341,30 @@ class FailOpenInterceptor:
         ):
             utilization = 1.0 - (attribution.budget_remaining_usd / attribution.budget_limit_usd)
             if utilization > 0.9:
-                violations.append(PolicyEvaluationResult(
-                    policy_id="budget_ceiling",
-                    policy_name="Budget Ceiling",
-                    action=EnforcementAction.SOFT_STOP,
-                    violated=True,
-                    details=f"Budget {utilization:.0%} utilized",
-                ))
+                violations.append(
+                    PolicyEvaluationResult(
+                        policy_id="budget_ceiling",
+                        policy_name="Budget Ceiling",
+                        action=EnforcementAction.SOFT_STOP,
+                        violated=True,
+                        details=f"Budget {utilization:.0%} utilized",
+                    )
+                )
 
         # Token budget.
         if (
             attribution.token_budget_output
             and request.metadata.get("max_tokens", 0) > attribution.token_budget_output
         ):
-            violations.append(PolicyEvaluationResult(
-                policy_id="token_budget",
-                policy_name="Token Budget Per Request",
-                action=EnforcementAction.SOFT_STOP,
-                violated=True,
-                details=f"Requested tokens exceed budget of {attribution.token_budget_output}",
-            ))
+            violations.append(
+                PolicyEvaluationResult(
+                    policy_id="token_budget",
+                    policy_name="Token Budget Per Request",
+                    action=EnforcementAction.SOFT_STOP,
+                    violated=True,
+                    details=f"Requested tokens exceed budget of {attribution.token_budget_output}",
+                )
+            )
 
         return violations
 
@@ -391,7 +410,9 @@ class FailOpenInterceptor:
             )
 
         has_violation = any(v.violated for v in violations)
-        outcome = InterceptionOutcome.SOFT_STOPPED if has_violation else InterceptionOutcome.ENRICHED
+        outcome = (
+            InterceptionOutcome.SOFT_STOPPED if has_violation else InterceptionOutcome.ENRICHED
+        )
         elapsed_ms = (time.monotonic() - start) * 1000
         self.total_enriched += 1
         return InterceptionResult(
@@ -442,7 +463,48 @@ class FailOpenInterceptor:
         if violations:
             headers["X-Policy-Violations"] = str(len(violations))
 
-        return headers
+        return self._enforce_header_budget(headers)
+
+    def _enforce_header_budget(self, headers: dict[str, str]) -> dict[str, str]:
+        """
+        Enforce max header size budget and clamp oversized values.
+
+        Reliability guardrail: avoid oversized headers that upstream gateways
+        may reject or truncate unexpectedly.
+        """
+        clamped = {
+            key: value[: self.config.max_header_value_length] for key, value in headers.items()
+        }
+
+        max_bytes = self.config.max_enrichment_header_bytes
+        if self._estimate_header_bytes(clamped) <= max_bytes:
+            return clamped
+
+        # Keep core attribution headers; drop optional headers first.
+        priority = [
+            "X-Compute-Cost-USD",
+            "X-Attribution-Confidence",
+            "X-Attribution-Team",
+            "X-Attribution-Method",
+            "X-Confidence-Flag",
+            "X-Policy-Violations",
+            "X-Budget-Remaining-Pct",
+            "X-Alternative-Models-Available",
+        ]
+        trimmed: dict[str, str] = {}
+        for key in priority:
+            if key in clamped:
+                trimmed[key] = clamped[key]
+            if self._estimate_header_bytes(trimmed) > max_bytes:
+                trimmed.pop(key, None)
+                break
+
+        trimmed["X-Header-Budget-Applied"] = "1"
+        return trimmed
+
+    @staticmethod
+    def _estimate_header_bytes(headers: dict[str, str]) -> int:
+        return sum(len(key) + len(value) + 4 for key, value in headers.items())
 
     def _emit_shadow_event(
         self,
@@ -472,18 +534,24 @@ class FailOpenInterceptor:
                     "elapsed_ms": elapsed_ms,
                     "interceptor_mode": self.mode.value,
                 },
-                event_time=datetime.now(timezone.utc),
+                event_time=datetime.now(UTC),
                 source="interceptor",
                 idempotency_key=f"shadow:{request_id}",
                 tenant_id="",  # Populated by bus middleware in production.
             )
             publish_result = self._event_bus.publish(event)
             if inspect.isawaitable(publish_result):
+                awaitable = cast("Awaitable[bool]", publish_result)
                 try:
                     loop = asyncio.get_running_loop()
-                    loop.create_task(publish_result)
                 except RuntimeError:
-                    asyncio.run(publish_result)
+                    if inspect.iscoroutine(awaitable):
+                        awaitable.close()
+                    logger.debug("interceptor.shadow_event.no_running_loop")
+                    return False
+
+                task = loop.create_task(self._drain_shadow_publish(awaitable))
+                self._track_background_task(task)
                 return True
 
             return bool(publish_result)
@@ -507,7 +575,26 @@ class FailOpenInterceptor:
                 return normalized
         return ""
 
-    def get_metrics(self) -> dict:
+    async def _drain_shadow_publish(self, publish_result: Awaitable[bool]) -> None:
+        """Best-effort async publish drain for fire-and-forget shadow events."""
+        try:
+            await publish_result
+        except Exception as exc:
+            logger.debug("interceptor.shadow_event.await_failed", error=str(exc))
+
+    def _track_background_task(self, task: asyncio.Task[Any]) -> None:
+        tracked = cast("asyncio.Task[None]", task)
+        self._background_tasks.add(tracked)
+        tracked.add_done_callback(self._background_tasks.discard)
+
+    async def shutdown(self) -> None:
+        """Drain outstanding background tasks during process shutdown."""
+        if not self._background_tasks:
+            return
+        await asyncio.gather(*list(self._background_tasks), return_exceptions=True)
+        self._background_tasks.clear()
+
+    def get_metrics(self) -> dict[str, int | str]:
         return {
             "total_requests": self.total_requests,
             "total_enriched": self.total_enriched,
@@ -519,5 +606,5 @@ class FailOpenInterceptor:
         }
 
     @property
-    def stats(self) -> dict:
+    def stats(self) -> dict[str, int | str]:
         return self.get_metrics()

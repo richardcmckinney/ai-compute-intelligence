@@ -18,10 +18,9 @@ import math
 from collections import defaultdict
 
 import numpy as np
+import structlog
 from scipy.stats import ks_2samp
 from sklearn.isotonic import IsotonicRegression
-
-import structlog
 
 from aci.config import ConfidenceConfig
 from aci.models.confidence import (
@@ -97,6 +96,14 @@ class CalibrationEngine:
         # Otherwise, interpolate from the curve points.
         return self._interpolate(curve.raw_scores, curve.calibrated_scores, raw_confidence)
 
+    def calibrate_score(self, method: str, raw_confidence: float) -> float:
+        """
+        Backward-compatible wrapper for older call sites.
+
+        The canonical entrypoint is ``calibrate``.
+        """
+        return self.calibrate(method, raw_confidence)
+
     def add_ground_truth(self, label: GroundTruthLabel) -> None:
         """
         Record a ground truth observation for the calibration loop.
@@ -126,8 +133,8 @@ class CalibrationEngine:
         It requires sufficient tail coverage for stable curves.
         """
         labels = self.ground_truth[method]
-        raw_scores = np.array([l.predicted_confidence for l in labels])
-        outcomes = np.array([1.0 if l.was_correct else 0.0 for l in labels])
+        raw_scores = np.array([label.predicted_confidence for label in labels])
+        outcomes = np.array([1.0 if label.was_correct else 0.0 for label in labels])
 
         iso = IsotonicRegression(y_min=0.0, y_max=self.config.cap, out_of_bounds="clip")
         iso.fit(raw_scores, outcomes)
@@ -147,14 +154,16 @@ class CalibrationEngine:
 
         # Check KS statistic against warm-start for transition logging.
         if method in WARM_START_CURVES:
-            warm_calibrated = np.array([
-                self._interpolate(
-                    [p[0] for p in WARM_START_CURVES[method]],
-                    [p[1] for p in WARM_START_CURVES[method]],
-                    x,
-                )
-                for x in test_points
-            ])
+            warm_calibrated = np.array(
+                [
+                    self._interpolate(
+                        [p[0] for p in WARM_START_CURVES[method]],
+                        [p[1] for p in WARM_START_CURVES[method]],
+                        x,
+                    )
+                    for x in test_points
+                ]
+            )
             ks_stat, _ = ks_2samp(calibrated_points, warm_calibrated)
             customer_curve.ks_statistic = float(ks_stat)
 
@@ -174,8 +183,8 @@ class CalibrationEngine:
         when sample count is between 50 and 200 (Section 5.2).
         """
         labels = self.ground_truth[method]
-        raw_scores = np.array([l.predicted_confidence for l in labels])
-        outcomes = np.array([1.0 if l.was_correct else 0.0 for l in labels])
+        raw_scores = np.array([label.predicted_confidence for label in labels])
+        outcomes = np.array([1.0 if label.was_correct else 0.0 for label in labels])
 
         # Bootstrap: resample 100 times, fit isotonic each time.
         n_bootstrap = 100

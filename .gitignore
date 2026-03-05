@@ -16,4 +16,5 @@ htmlcov/
 .venv/
 venv/
 *.log
+uv.lock
 results/

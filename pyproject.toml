@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "aci-platform"
-version = "0.1.0"
+version = "0.2.0"
 description = "AI Compute Intelligence Platform: application-level cost and carbon attribution for enterprise AI workloads"
 requires-python = ">=3.12"
 dependencies = [
@@ -26,6 +26,7 @@ dependencies = [
     "orjson>=3.10.0",
     "prometheus-client>=0.21.0",
     "cryptography>=44.0.0",
+    "PyJWT[crypto]>=2.10.1",
 ]
 
 [project.optional-dependencies]
@@ -67,3 +68,16 @@ select = ["E", "F", "I", "N", "W", "UP", "ANN", "B", "SIM", "TCH"]
 python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = [
+    "aiokafka",
+    "aiokafka.*",
+    "locust",
+    "locust.*",
+    "scipy",
+    "scipy.*",
+    "sklearn",
+    "sklearn.*",
+]
+ignore_missing_imports = true
