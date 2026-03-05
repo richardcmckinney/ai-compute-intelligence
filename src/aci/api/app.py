@@ -9,13 +9,16 @@ on deployment topology.
 from __future__ import annotations
 
 import asyncio
+import os
+from collections import deque
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import structlog
 from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -73,6 +76,10 @@ class AppState:
         self.runtime_role = self.config.runtime_role.lower()
         self.accepts_ingestion = self.runtime_role in {"all", "processor"}
         self.accepts_interception = self.runtime_role in {"all", "gateway"}
+        self.ingest_rate_limiter = SlidingWindowRateLimiter(
+            self.config.api_ingest_rate_limit_per_minute
+        )
+        self.ingest_max_batch_size = self.config.api_ingest_max_batch_size
         self.event_bus = self._build_event_bus()
         self.graph = GraphStore()
 
@@ -138,6 +145,7 @@ class AppState:
         await self.event_bus.start()
 
     async def stop(self) -> None:
+        await self.interceptor.shutdown()
         await self.event_bus.stop()
 
     def readiness_checks(self) -> dict[str, bool]:
@@ -154,17 +162,66 @@ class AppState:
         return checks
 
 
-state = AppState()
+class SlidingWindowRateLimiter:
+    """Simple in-memory sliding window limiter for ingestion endpoints."""
+
+    def __init__(self, limit: int, window_seconds: float = 60.0) -> None:
+        self._limit = limit
+        self._window_seconds = window_seconds
+        self._events: dict[str, deque[float]] = {}
+        self._lock = asyncio.Lock()
+
+    async def allow(self, key: str) -> bool:
+        now = datetime.now(UTC).timestamp()
+        cutoff = now - self._window_seconds
+        async with self._lock:
+            bucket = self._events.get(key)
+            if bucket is None:
+                bucket = deque()
+                self._events[key] = bucket
+
+            while bucket and bucket[0] <= cutoff:
+                bucket.popleft()
+
+            if len(bucket) >= self._limit:
+                return False
+
+            bucket.append(now)
+            return True
+
+
+_app_state: AppState | None = None
+
+
+def get_state() -> AppState:
+    global _app_state
+    if _app_state is None:
+        _app_state = AppState()
+    return _app_state
+
+
+class _AppStateProxy:
+    """Backwards-compatible lazy proxy for test imports."""
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(get_state(), name)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        setattr(get_state(), name, value)
+
+
+state = cast("AppState", _AppStateProxy())
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan: initialize and tear down platform components."""
     del app
-    logger.info("platform.starting", tenant=state.config.tenant_id)
-    await state.start()
+    app_state = get_state()
+    logger.info("platform.starting", tenant=app_state.config.tenant_id)
+    await app_state.start()
     yield
-    await state.stop()
+    await app_state.stop()
     logger.info("platform.shutting_down")
 
 
@@ -175,6 +232,20 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.add_middleware(GZipMiddleware, minimum_size=500)
+
+cors_allowed_origins = [
+    origin.strip()
+    for origin in os.getenv("ACI_API_CORS_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+if cors_allowed_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_allowed_origins,
+        allow_credentials=os.getenv("ACI_API_CORS_ALLOW_CREDENTIALS", "false").lower() == "true",
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Requested-With", "X-ACI-Request-ID"],
+    )
 
 
 @app.middleware("http")
@@ -200,13 +271,14 @@ async def enforce_service_auth(
     if is_public_path(path) or not is_auth_required(path):
         return await call_next(request)
 
-    auth_config = state.config.auth
+    app_state = get_state()
+    auth_config = app_state.config.auth
     if not auth_config.enabled:
         return await call_next(request)
 
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
-        if can_bypass_auth(state.config):
+        if can_bypass_auth(app_state.config):
             return await call_next(request)
         return JSONResponse(
             status_code=401,
@@ -216,7 +288,7 @@ async def enforce_service_auth(
 
     token = auth_header.removeprefix("Bearer ").strip()
     try:
-        claims = decode_and_validate_token(token, auth_config, state.config.tenant_id)
+        claims = decode_and_validate_token(token, auth_config, app_state.config.tenant_id)
     except InvalidTokenError as exc:
         logger.warning("auth.token_invalid", error=str(exc), path=path)
         return JSONResponse(
@@ -361,6 +433,24 @@ class DashboardOverviewResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+def _ingest_rate_limit_key(request: Request) -> str:
+    """Derive a stable per-caller key for ingestion throttling."""
+    claims = getattr(request.state, "auth_claims", None)
+    if isinstance(claims, dict):
+        subject = str(claims.get("sub", "")).strip()
+        if subject:
+            return f"sub:{subject}"
+
+    forwarded_for = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+    if forwarded_for:
+        return f"ip:{forwarded_for}"
+
+    if request.client and request.client.host:
+        return f"ip:{request.client.host}"
+
+    return "anonymous"
+
+
 @app.get("/", response_model=RootResponse)
 async def root() -> RootResponse:
     """Root metadata and quick links."""
@@ -376,15 +466,16 @@ async def root() -> RootResponse:
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     """Platform summary health check for operators."""
-    checks = state.readiness_checks()
+    app_state = get_state()
+    checks = app_state.readiness_checks()
     status = "healthy" if all(checks.values()) else "degraded"
     return HealthResponse(
         status=status,
         timestamp=datetime.now(UTC).isoformat(),
-        index_size=state.index_store.size,
-        runtime_role=state.runtime_role,
-        interceptor_mode=state.interceptor.mode.value,
-        circuit_breaker=state.interceptor.circuit_breaker.state,
+        index_size=app_state.index_store.size,
+        runtime_role=app_state.runtime_role,
+        interceptor_mode=app_state.interceptor.mode.value,
+        circuit_breaker=app_state.interceptor.circuit_breaker.state,
     )
 
 
@@ -400,7 +491,7 @@ async def live() -> LivenessResponse:
 @app.get("/ready", response_model=ReadinessResponse)
 async def ready() -> ReadinessResponse:
     """Readiness probe endpoint: required runtime dependencies are available."""
-    checks = state.readiness_checks()
+    checks = get_state().readiness_checks()
     if not all(checks.values()):
         raise HTTPException(
             status_code=503,
@@ -420,21 +511,25 @@ async def ready() -> ReadinessResponse:
 @app.get("/metrics")
 async def metrics() -> dict[str, dict[str, Any]]:
     """Platform metrics for monitoring."""
+    app_state = get_state()
     return {
-        "index": state.index_store.stats,
-        "interceptor": state.interceptor.stats,
-        "processor": state.processor.stats,
-        "event_bus": state.event_bus.stats,
+        "index": app_state.index_store.stats,
+        "interceptor": app_state.interceptor.stats,
+        "processor": app_state.processor.stats,
+        "event_bus": app_state.event_bus.stats,
     }
 
 
 @app.post("/v1/events/ingest", response_model=EventIngestResponse)
-async def ingest_event(req: EventIngestRequest) -> EventIngestResponse:
+async def ingest_event(request: Request, req: EventIngestRequest) -> EventIngestResponse:
     """Ingest a single domain event into the append-only bus."""
-    if not state.accepts_ingestion:
+    app_state = get_state()
+    if not app_state.accepts_ingestion:
         raise HTTPException(
             status_code=503, detail="event ingestion disabled for this runtime role"
         )
+    if not await app_state.ingest_rate_limiter.allow(_ingest_rate_limit_key(request)):
+        raise HTTPException(status_code=429, detail="ingestion rate limit exceeded")
 
     try:
         attributes = validate_event_attributes(req.event_type, req.attributes)
@@ -448,18 +543,32 @@ async def ingest_event(req: EventIngestRequest) -> EventIngestResponse:
         event_time=req.event_time,
         source=req.source,
         idempotency_key=req.idempotency_key,
-        tenant_id=state.config.tenant_id,
+        tenant_id=app_state.config.tenant_id,
     )
-    accepted = await state.event_bus.publish(event)
+    accepted = await app_state.event_bus.publish(event)
     return EventIngestResponse(accepted=accepted, event_id=event.event_id)
 
 
 @app.post("/v1/events/ingest/batch", response_model=EventBatchIngestResponse)
-async def ingest_events_batch(req: EventBatchIngestRequest) -> EventBatchIngestResponse:
+async def ingest_events_batch(
+    request: Request,
+    req: EventBatchIngestRequest,
+) -> EventBatchIngestResponse:
     """Ingest a batch of domain events with idempotency-aware accounting."""
-    if not state.accepts_ingestion:
+    app_state = get_state()
+    if not app_state.accepts_ingestion:
         raise HTTPException(
             status_code=503, detail="event ingestion disabled for this runtime role"
+        )
+    if not await app_state.ingest_rate_limiter.allow(_ingest_rate_limit_key(request)):
+        raise HTTPException(status_code=429, detail="ingestion rate limit exceeded")
+    if len(req.events) > app_state.ingest_max_batch_size:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"batch size {len(req.events)} exceeds configured max "
+                f"{app_state.ingest_max_batch_size}"
+            ),
         )
 
     events: list[DomainEvent] = []
@@ -477,10 +586,10 @@ async def ingest_events_batch(req: EventBatchIngestRequest) -> EventBatchIngestR
                 event_time=e.event_time,
                 source=e.source,
                 idempotency_key=e.idempotency_key,
-                tenant_id=state.config.tenant_id,
+                tenant_id=app_state.config.tenant_id,
             )
         )
-    result = await state.event_bus.publish_batch(events)
+    result = await app_state.event_bus.publish_batch(events)
     return EventBatchIngestResponse(
         total=len(events),
         accepted=result["published"],
@@ -498,7 +607,8 @@ async def intercept(req: InterceptRequest) -> InterceptResponse:
     framework level, catching event-loop contention that the internal timer
     cannot detect. On timeout, the request proceeds unmodified (fail-open).
     """
-    if not state.accepts_interception:
+    app_state = get_state()
+    if not app_state.accepts_interception:
         raise HTTPException(status_code=503, detail="interceptor disabled for this runtime role")
 
     interception_req = InterceptionRequest(
@@ -513,14 +623,14 @@ async def intercept(req: InterceptRequest) -> InterceptResponse:
 
     try:
         result = await asyncio.wait_for(
-            state.interceptor.intercept(interception_req),
-            timeout=state.config.interceptor.total_budget_ms / 1000.0,
+            app_state.interceptor.intercept(interception_req),
+            timeout=app_state.config.interceptor.total_budget_ms / 1000.0,
         )
     except TimeoutError:
         return InterceptResponse(
             request_id=req.request_id,
             outcome=InterceptionOutcome.TIMEOUT.value,
-            elapsed_ms=float(state.config.interceptor.total_budget_ms),
+            elapsed_ms=float(app_state.config.interceptor.total_budget_ms),
             enrichment_headers={},
             redirect_model=None,
             attribution_team=None,
@@ -541,7 +651,7 @@ async def intercept(req: InterceptRequest) -> InterceptResponse:
 @app.post("/v1/trac", response_model=TRACResponse)
 async def compute_trac(req: TRACRequest) -> TRACResponse:
     """Compute TRAC for a workload."""
-    result = state.trac.compute(
+    result = get_state().trac.compute(
         workload_id=req.workload_id,
         billed_cost_usd=req.billed_cost_usd,
         emissions_kg_co2e=req.emissions_kg_co2e,
@@ -562,7 +672,7 @@ async def compute_trac(req: TRACRequest) -> TRACResponse:
 @app.get("/v1/attribution/{workload_id}", response_model=IndexLookupResponse)
 async def get_attribution(workload_id: str) -> IndexLookupResponse:
     """Look up current attribution for a workload."""
-    entry = state.index_store.lookup(workload_id)
+    entry = get_state().index_store.lookup(workload_id)
     if entry is None:
         raise HTTPException(status_code=404, detail="Workload not found in attribution index")
 
@@ -581,20 +691,21 @@ async def get_attribution(workload_id: str) -> IndexLookupResponse:
 @app.get("/v1/index/stats")
 async def index_stats() -> dict[str, Any]:
     """Attribution index statistics."""
-    return state.index_store.stats
+    return get_state().index_store.stats
 
 
 @app.get("/v1/dashboard/overview", response_model=DashboardOverviewResponse)
 async def dashboard_overview() -> DashboardOverviewResponse:
     """Frontend-ready overview metrics for the platform dashboard."""
-    interceptor_stats = state.interceptor.stats
-    index_stats_payload = state.index_store.stats
-    event_stats = state.event_bus.stats
+    app_state = get_state()
+    interceptor_stats = app_state.interceptor.stats
+    index_stats_payload = app_state.index_store.stats
+    event_stats = app_state.event_bus.stats
 
     return DashboardOverviewResponse(
-        tenant_id=state.config.tenant_id,
-        environment=state.config.environment,
-        runtime_role=state.runtime_role,
+        tenant_id=app_state.config.tenant_id,
+        environment=app_state.config.environment,
+        runtime_role=app_state.runtime_role,
         generated_at=datetime.now(UTC).isoformat(),
         index_size=index_stats_payload.get("size", 0),
         index_hit_rate=index_stats_payload.get("hit_rate", 0.0),

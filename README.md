@@ -24,13 +24,19 @@ Phase 6: Reporting      Dashboards, compliance exports, federated benchmarks
 ### Runtime Upgrades (v0.2)
 
 - Event ingestion now enforces strict per-event payload schemas before events are accepted by the bus.
+- Event ingestion now enforces per-caller rate limits and bounded batch sizes (`ACI_API_INGEST_RATE_LIMIT_PER_MINUTE`, `ACI_API_INGEST_MAX_BATCH_SIZE`).
 - Production event bus now supports durable Kafka transport with dead-letter topic routing and consumer lag metrics.
+- Kafka consumers now start at `earliest` for new groups and commit offsets with explicit metadata objects for deterministic recovery behavior.
 - Idempotency deduplication now supports Redis-backed TTL storage for production durability.
+- Idempotency keys are now tenant-scoped to prevent cross-tenant dedup collisions.
 - `GraphStore` now maintains adjacency indexes and active-edge indexes to avoid full edge-list scans as graph size grows.
+- Graph traversal now enforces a bounded maximum path count to prevent exponential path blowups on dense graphs.
 - `AttributionIndexStore` now supports Redis durable fallback so LRU eviction does not permanently lose active attributions.
 - `CircuitBreaker` now supports Redis-backed shared state to keep fail-open behavior consistent across replicas.
 - `FailOpenInterceptor` now resolves workload IDs more robustly and hardens shadow-event emission behavior.
+- API runtime initialization is lazy (no import-time infrastructure side effects), improving testability and startup resilience.
 - API endpoints under `/v1/*` now enforce service-to-service JWT auth with issuer/audience/scope and tenant-claim checks.
+- Optional browser CORS policy is now configurable via `ACI_API_CORS_ALLOWED_ORIGINS`.
 
 ### Core Innovations
 
@@ -149,6 +155,11 @@ uvicorn aci.api.app:app --reload --port 8000
 Authentication behavior:
 - Development: unauthenticated access is allowed only when `ACI_ENVIRONMENT=development` and `ACI_AUTH_ALLOW_DEV_BYPASS=true`.
 - Staging/Production: bearer token is required for `/v1/*`, with JWT validation for issuer, audience, scope, expiry, and tenant claim.
+
+Transport hardening:
+- Production/staging startup validation requires `ACI_REDIS_URL` to use `rediss://` whenever Redis-backed index, circuit state, or Kafka dedup is enabled.
+- Kafka transport should be configured with TLS/SASL listeners in production clusters (dev defaults remain plaintext for local compose).
+- `docker-compose.yml` requires `ACI_NEO4J_PASSWORD` from `.env`; no inline credential defaults are baked into compose health checks.
 
 Operational probes:
 - `GET /live` for liveness.

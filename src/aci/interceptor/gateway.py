@@ -146,6 +146,7 @@ class FailOpenInterceptor:
         self.total_fail_open = 0
         self.total_redirected = 0
         self.total_cache_misses = 0
+        self._background_tasks: set[asyncio.Task[None]] = set()
 
     async def intercept(self, request: InterceptionRequest) -> InterceptionResult:
         """
@@ -158,7 +159,7 @@ class FailOpenInterceptor:
         start = time.monotonic()
 
         try:
-            return self._intercept_inner(request, start)
+            return await self._intercept_inner(request, start)
         except Exception as exc:
             elapsed_ms = (time.monotonic() - start) * 1000
             self.total_fail_open += 1
@@ -185,7 +186,7 @@ class FailOpenInterceptor:
                 shadow_event_logged=shadow_logged,
             )
 
-    def _intercept_inner(
+    async def _intercept_inner(
         self,
         request: InterceptionRequest,
         start: float,
@@ -224,9 +225,10 @@ class FailOpenInterceptor:
             if self._shadow_refresh_fn and self.shadow_warmer.should_trigger_refresh(workload_id):
                 try:
                     loop = asyncio.get_running_loop()
-                    loop.create_task(
+                    task = loop.create_task(
                         self.shadow_warmer.trigger_refresh(workload_id, self._shadow_refresh_fn)
                     )
+                    self._track_background_task(task)
                 except RuntimeError:
                     pass  # No running loop; skip background refresh.
 
@@ -539,13 +541,17 @@ class FailOpenInterceptor:
             )
             publish_result = self._event_bus.publish(event)
             if inspect.isawaitable(publish_result):
+                awaitable = cast("Awaitable[bool]", publish_result)
                 try:
-                    asyncio.get_running_loop()
-                    asyncio.ensure_future(
-                        self._drain_shadow_publish(cast("Awaitable[bool]", publish_result))
-                    )
+                    loop = asyncio.get_running_loop()
                 except RuntimeError:
-                    asyncio.run(self._drain_shadow_publish(cast("Awaitable[bool]", publish_result)))
+                    if inspect.iscoroutine(awaitable):
+                        awaitable.close()
+                    logger.debug("interceptor.shadow_event.no_running_loop")
+                    return False
+
+                task = loop.create_task(self._drain_shadow_publish(awaitable))
+                self._track_background_task(task)
                 return True
 
             return bool(publish_result)
@@ -575,6 +581,18 @@ class FailOpenInterceptor:
             await publish_result
         except Exception as exc:
             logger.debug("interceptor.shadow_event.await_failed", error=str(exc))
+
+    def _track_background_task(self, task: asyncio.Task[Any]) -> None:
+        tracked = cast("asyncio.Task[None]", task)
+        self._background_tasks.add(tracked)
+        tracked.add_done_callback(self._background_tasks.discard)
+
+    async def shutdown(self) -> None:
+        """Drain outstanding background tasks during process shutdown."""
+        if not self._background_tasks:
+            return
+        await asyncio.gather(*list(self._background_tasks), return_exceptions=True)
+        self._background_tasks.clear()
 
     def get_metrics(self) -> dict[str, int | str]:
         return {

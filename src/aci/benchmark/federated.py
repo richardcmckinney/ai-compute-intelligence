@@ -260,15 +260,19 @@ class FederatedBenchmarkProtocol:
                     f"exceeds quarterly limit {self.config.epsilon_total_quarterly}"
                 )
 
-        # Compute sensitivity.
-        sensitivity = self.sensitivity_bounds.get(metric_name, 1000.0) / len(values)
+        # Compute per-statistic sensitivity:
+        # mean sensitivity scales with 1/n, median remains bounded by clipping range.
+        bound = self.sensitivity_bounds.get(metric_name, 1000.0)
+        mean_sensitivity = bound / len(values)
+        median_sensitivity = bound
 
         # Add calibrated noise: scale = sensitivity / epsilon.
-        noise_scale = sensitivity / epsilon
+        mean_noise_scale = mean_sensitivity / epsilon
+        median_noise_scale = median_sensitivity / epsilon
         raw_mean = float(np.mean(values))
         raw_median = float(np.median(values))
-        noisy_mean = raw_mean + self._add_noise(noise_scale)
-        noisy_median = raw_median + self._add_noise(noise_scale)
+        noisy_mean = raw_mean + self._add_noise(mean_noise_scale)
+        noisy_median = raw_median + self._add_noise(median_noise_scale)
 
         # Update privacy budgets.
         for member in members:

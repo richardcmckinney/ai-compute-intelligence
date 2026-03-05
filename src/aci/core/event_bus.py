@@ -14,14 +14,16 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import threading
 from collections import defaultdict, deque
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Protocol
 
 import structlog
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
+from aiokafka.structs import OffsetAndMetadata
 from redis.asyncio import Redis as AsyncRedis
 
 from aci.core.event_schema import validate_domain_event
@@ -104,6 +106,7 @@ class InMemoryEventBus:
 
         # Topic-based subscription.
         self._handlers: dict[str, list[EventHandler]] = defaultdict(list)
+        self._handler_lock = threading.Lock()
 
         # Idempotency deduplication.
         self._seen_keys: set[str] = set()
@@ -142,7 +145,7 @@ class InMemoryEventBus:
         """
         validate_domain_event(event)
 
-        dedup_key = f"{event.source}:{event.idempotency_key}"
+        dedup_key = f"{event.tenant_id}:{event.source}:{event.idempotency_key}"
         topic = event.event_type.value
 
         async with self._state_lock:
@@ -162,10 +165,11 @@ class InMemoryEventBus:
             self._published_count += 1
             self._topic_counts[topic] += 1
 
-        handlers = [
-            *(self._handlers.get(topic, [])),
-            *(self._handlers.get("*", [])),
-        ]
+        with self._handler_lock:
+            handlers = [
+                *(self._handlers.get(topic, [])),
+                *(self._handlers.get("*", [])),
+            ]
         if not handlers:
             return True
 
@@ -176,7 +180,8 @@ class InMemoryEventBus:
 
     def subscribe(self, topic: str, handler: EventHandler) -> None:
         """Subscribe a handler to a topic. Use '*' for all events."""
-        self._handlers[topic].append(handler)
+        with self._handler_lock:
+            self._handlers[topic].append(handler)
 
     async def publish_batch(self, events: list[DomainEvent]) -> dict[str, int]:
         """Publish a batch of events and return publish/dedup counts."""
@@ -235,6 +240,9 @@ class InMemoryEventBus:
 
     @property
     def stats(self) -> dict[str, object]:
+        with self._handler_lock:
+            topics = list(self._handlers.keys())
+
         return {
             "backend": "memory",
             "started": True,
@@ -244,7 +252,7 @@ class InMemoryEventBus:
             "idempotency_cache_size": len(self._seen_keys),
             "idempotency_evictions": self._idempotency_evictions,
             "dispatch_errors": self._dispatch_errors,
-            "topics": list(self._handlers.keys()),
+            "topics": topics,
             "published_by_topic": dict(self._topic_counts),
         }
 
@@ -268,6 +276,7 @@ class KafkaEventBus:
         self._idempotency_store = idempotency_store
 
         self._handlers: dict[str, list[EventHandler]] = defaultdict(list)
+        self._handler_lock = threading.Lock()
         self._dispatch_semaphore = asyncio.Semaphore(64)
 
         self._producer: AIOKafkaProducer | None = None
@@ -298,7 +307,7 @@ class KafkaEventBus:
             bootstrap_servers=self._bootstrap_servers,
             group_id=self._consumer_group,
             enable_auto_commit=False,
-            auto_offset_reset="latest",
+            auto_offset_reset="earliest",
         )
         await self._consumer.start()
 
@@ -338,7 +347,8 @@ class KafkaEventBus:
         return self._started
 
     def subscribe(self, topic: str, handler: EventHandler) -> None:
-        self._handlers[topic].append(handler)
+        with self._handler_lock:
+            self._handlers[topic].append(handler)
 
     async def publish(self, event: DomainEvent) -> bool:
         validate_domain_event(event)
@@ -348,7 +358,7 @@ class KafkaEventBus:
 
         assert self._producer is not None
 
-        dedup_key = f"{event.source}:{event.idempotency_key}"
+        dedup_key = f"{event.tenant_id}:{event.source}:{event.idempotency_key}"
         already_seen = await self._idempotency_store.seen_or_add(dedup_key)
         if already_seen:
             self._deduplicated_count += 1
@@ -395,19 +405,25 @@ class KafkaEventBus:
             event = DomainEvent.model_validate_json(payload)
             validate_domain_event(event)
             await self._dispatch_event(event)
-            await self._consumer.commit({topic_partition: offset + 1})
+            await self._commit_offset(topic_partition, offset)
             self._update_partition_lag(topic_partition, offset)
         except Exception as exc:
             self._dispatch_errors += 1
             await self._publish_dlq(payload, str(exc), topic_partition, offset)
-            await self._consumer.commit({topic_partition: offset + 1})
+            await self._commit_offset(topic_partition, offset)
+
+    async def _commit_offset(self, topic_partition: TopicPartition, offset: int) -> None:
+        """Commit a processed offset with explicit metadata type."""
+        assert self._consumer is not None
+        await self._consumer.commit({topic_partition: OffsetAndMetadata(offset + 1, "")})
 
     async def _dispatch_event(self, event: DomainEvent) -> None:
         topic = event.event_type.value
-        handlers = [
-            *(self._handlers.get(topic, [])),
-            *(self._handlers.get("*", [])),
-        ]
+        with self._handler_lock:
+            handlers = [
+                *(self._handlers.get(topic, [])),
+                *(self._handlers.get("*", [])),
+            ]
         if not handlers:
             return
 
@@ -446,7 +462,7 @@ class KafkaEventBus:
             "topic": topic_partition.topic,
             "partition": topic_partition.partition,
             "offset": offset,
-            "failed_at": datetime.utcnow().isoformat() + "Z",
+            "failed_at": datetime.now(UTC).isoformat(),
             "payload": payload.decode("utf-8", errors="replace"),
         }
         await self._producer.send_and_wait(
@@ -481,6 +497,9 @@ class KafkaEventBus:
 
     @property
     def stats(self) -> dict[str, object]:
+        with self._handler_lock:
+            topics = list(self._handlers.keys())
+
         return {
             "backend": "kafka",
             "started": self._started,
@@ -493,5 +512,5 @@ class KafkaEventBus:
             "dlq_topic": self._dlq_topic,
             "consumer_lag_by_partition": dict(self._consumer_lag_by_partition),
             "consumer_lag_total": sum(self._consumer_lag_by_partition.values()),
-            "topics": list(self._handlers.keys()),
+            "topics": topics,
         }

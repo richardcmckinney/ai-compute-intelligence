@@ -4,8 +4,9 @@ from datetime import UTC, datetime
 from typing import cast
 
 import pytest
+from aiokafka.structs import OffsetAndMetadata, TopicPartition
 
-from aci.core.event_bus import InMemoryEventBus
+from aci.core.event_bus import InMemoryEventBus, InMemoryIdempotencyStore, KafkaEventBus
 from aci.models.events import DomainEvent, EventType
 
 
@@ -80,3 +81,47 @@ async def test_publish_batch_reports_counts() -> None:
 
     assert result["published"] == 2
     assert result["deduplicated"] == 1
+
+
+@pytest.mark.asyncio
+async def test_deduplication_is_scoped_by_tenant() -> None:
+    bus = InMemoryEventBus(max_events=16)
+
+    event_a = make_event("evt-tenant-a", "shared-key").model_copy(update={"tenant_id": "tenant-a"})
+    event_b = make_event("evt-tenant-b", "shared-key").model_copy(update={"tenant_id": "tenant-b"})
+
+    accepted_a = await bus.publish(event_a)
+    accepted_b = await bus.publish(event_b)
+
+    assert accepted_a is True
+    assert accepted_b is True
+
+
+class _DummyConsumer:
+    def __init__(self) -> None:
+        self.commits: list[dict[TopicPartition, OffsetAndMetadata]] = []
+
+    async def commit(self, offsets: dict[TopicPartition, OffsetAndMetadata]) -> None:
+        self.commits.append(offsets)
+
+
+@pytest.mark.asyncio
+async def test_kafka_commit_uses_offset_and_metadata_type() -> None:
+    bus = KafkaEventBus(
+        bootstrap_servers="localhost:9092",
+        topic="aci.events",
+        dlq_topic="aci.events.dlq",
+        consumer_group="aci-tests",
+        idempotency_store=InMemoryIdempotencyStore(),
+    )
+    consumer = _DummyConsumer()
+    bus._consumer = consumer
+
+    topic_partition = TopicPartition("aci.events", 0)
+    await bus._commit_offset(topic_partition, offset=41)
+
+    assert len(consumer.commits) == 1
+    committed = consumer.commits[0]
+    metadata = committed[topic_partition]
+    assert isinstance(metadata, OffsetAndMetadata)
+    assert metadata.offset == 42

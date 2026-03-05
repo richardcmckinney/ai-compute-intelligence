@@ -30,6 +30,7 @@ class GraphStore:
 
     def __init__(self) -> None:
         self.nodes: dict[str, GraphNode] = {}
+        self._nodes_by_type: dict[NodeType, set[str]] = defaultdict(set)
         self.edges: list[GraphEdge] = []
         self._from_index: dict[str, list[int]] = defaultdict(list)
         self._to_index: dict[str, list[int]] = defaultdict(list)
@@ -39,8 +40,11 @@ class GraphStore:
         """Insert or update a node."""
         existing = self.nodes.get(node.node_id)
         if existing:
+            self._nodes_by_type[existing.node_type].discard(existing.node_id)
+        if existing:
             node = node.model_copy(update={"updated_at": datetime.now(UTC)})
         self.nodes[node.node_id] = node
+        self._nodes_by_type[node.node_type].add(node.node_id)
 
     def add_edge(self, edge: GraphEdge) -> None:
         """
@@ -69,7 +73,8 @@ class GraphStore:
 
     def get_nodes_by_type(self, node_type: NodeType) -> list[GraphNode]:
         """Return all nodes of a specific type."""
-        return [node for node in self.nodes.values() if node.node_type == node_type]
+        node_ids = self._nodes_by_type.get(node_type, set())
+        return [self.nodes[node_id] for node_id in node_ids]
 
     def get_edges_from(
         self,
@@ -108,6 +113,7 @@ class GraphStore:
         start_node_id: str,
         at_time: datetime | None = None,
         max_depth: int = 8,
+        max_paths: int = 10_000,
     ) -> list[list[GraphEdge]]:
         """
         Traverse the attribution graph from a starting node to cost centers.
@@ -121,7 +127,7 @@ class GraphStore:
         that are then materialized into the index.
         """
         paths: list[list[GraphEdge]] = []
-        self._dfs(start_node_id, at_time, [], paths, max_depth, set())
+        self._dfs(start_node_id, at_time, [], paths, max_depth, max_paths, set())
         return paths
 
     def _dfs(
@@ -131,9 +137,12 @@ class GraphStore:
         current_path: list[GraphEdge],
         all_paths: list[list[GraphEdge]],
         max_depth: int,
+        max_paths: int,
         visited: set[str],
     ) -> None:
         """Depth-first search for attribution paths."""
+        if len(all_paths) >= max_paths:
+            return
         if len(current_path) >= max_depth:
             return
         if node_id in visited:
@@ -150,13 +159,23 @@ class GraphStore:
             return
 
         for edge in edges:
+            if len(all_paths) >= max_paths:
+                break
             current_path.append(edge)
             # Check if we've reached a cost center (terminal node).
             target_node = self.nodes.get(edge.to_id)
             if target_node and target_node.node_type in (NodeType.COST_CENTER, NodeType.BUDGET):
                 all_paths.append(list(current_path))
             else:
-                self._dfs(edge.to_id, at_time, current_path, all_paths, max_depth, visited)
+                self._dfs(
+                    edge.to_id,
+                    at_time,
+                    current_path,
+                    all_paths,
+                    max_depth,
+                    max_paths,
+                    visited,
+                )
             current_path.pop()
 
         visited.discard(node_id)

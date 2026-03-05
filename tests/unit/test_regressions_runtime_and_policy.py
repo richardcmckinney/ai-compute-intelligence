@@ -127,3 +127,33 @@ def test_platform_config_rejects_disabled_auth_in_production() -> None:
                 jwt_hs256_secret="really-strong-secret",
             ),
         )
+
+
+def test_platform_config_requires_rediss_for_production_durable_backends() -> None:
+    with pytest.raises(ValueError, match="redis_url must use rediss://"):
+        PlatformConfig(
+            environment="production",
+            neo4j_password="strong-secret",
+            index_backend="redis",
+            redis_url="redis://cache.internal:6379/0",
+            auth=AuthConfig(
+                enabled=True,
+                allow_dev_bypass=False,
+                jwt_algorithm="HS256",
+                jwt_hs256_secret="really-strong-secret",
+            ),
+        )
+
+    config = PlatformConfig(
+        environment="production",
+        neo4j_password="strong-secret",
+        index_backend="redis",
+        redis_url="rediss://cache.internal:6379/0",
+        auth=AuthConfig(
+            enabled=True,
+            allow_dev_bypass=False,
+            jwt_algorithm="HS256",
+            jwt_hs256_secret="really-strong-secret",
+        ),
+    )
+    assert config.redis_url.startswith("rediss://")

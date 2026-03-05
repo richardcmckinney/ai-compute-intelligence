@@ -13,6 +13,7 @@ while refresh is in progress.
 from __future__ import annotations
 
 import random
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -52,6 +53,7 @@ class ShadowWarmer:
         self._state = RefreshState()
         self._refresh_count: int = 0
         self._suppressed_count: int = 0
+        self._lock = threading.Lock()
 
     def should_trigger_refresh(self, workload_id: str) -> bool:
         """
@@ -62,20 +64,21 @@ class ShadowWarmer:
         10,000 concurrent misses, roughly 100 attempt refresh, but only
         one succeeds (the first to acquire the lock).
         """
-        # Already refreshing this workload.
-        if workload_id in self._state.in_progress:
-            self._suppressed_count += 1
-            return False
+        with self._lock:
+            # Already refreshing this workload.
+            if workload_id in self._state.in_progress:
+                self._suppressed_count += 1
+                return False
 
-        # Minimum interval between refreshes for the same workload.
-        now = time.monotonic()
-        last = self._state.last_refresh.get(workload_id, 0.0)
-        if now - last < self._state.min_refresh_interval_s:
-            self._suppressed_count += 1
-            return False
+            # Minimum interval between refreshes for the same workload.
+            now = time.monotonic()
+            last = self._state.last_refresh.get(workload_id, 0.0)
+            if now - last < self._state.min_refresh_interval_s:
+                self._suppressed_count += 1
+                return False
 
-        # Probabilistic gate.
-        return random.random() < self.config.shadow_warm_probability
+            # Probabilistic gate.
+            return random.random() < self.config.shadow_warm_probability
 
     async def trigger_refresh(
         self,
@@ -88,15 +91,16 @@ class ShadowWarmer:
         Only one refresh runs at a time per workload ID.
         Returns True if refresh completed, False if suppressed.
         """
-        # Acquire "lock" (set membership as lightweight mutex).
-        if workload_id in self._state.in_progress:
-            return False
+        with self._lock:
+            if workload_id in self._state.in_progress:
+                return False
+            self._state.in_progress.add(workload_id)
 
-        self._state.in_progress.add(workload_id)
         try:
             await refresh_fn(workload_id)
-            self._state.last_refresh[workload_id] = time.monotonic()
-            self._refresh_count += 1
+            with self._lock:
+                self._state.last_refresh[workload_id] = time.monotonic()
+                self._refresh_count += 1
             logger.debug("shadow_warmer.refreshed", workload_id=workload_id)
             return True
 
@@ -109,12 +113,14 @@ class ShadowWarmer:
             return False
 
         finally:
-            self._state.in_progress.discard(workload_id)
+            with self._lock:
+                self._state.in_progress.discard(workload_id)
 
     @property
     def stats(self) -> dict[str, int]:
-        return {
-            "refreshes_completed": self._refresh_count,
-            "refreshes_suppressed": self._suppressed_count,
-            "in_progress": len(self._state.in_progress),
-        }
+        with self._lock:
+            return {
+                "refreshes_completed": self._refresh_count,
+                "refreshes_suppressed": self._suppressed_count,
+                "in_progress": len(self._state.in_progress),
+            }

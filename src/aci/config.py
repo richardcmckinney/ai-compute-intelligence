@@ -229,6 +229,22 @@ class PlatformConfig(BaseSettings):
         default="all",
         description="Runtime role (all|gateway|processor)",
     )
+    api_ingest_rate_limit_per_minute: int = Field(
+        default=600,
+        description="Per-caller ingestion request budget per minute",
+    )
+    api_ingest_max_batch_size: int = Field(
+        default=1000,
+        description="Maximum accepted events per batch ingestion request",
+    )
+    api_cors_allowed_origins: str = Field(
+        default="",
+        description="Comma-separated CORS allowlist for browser clients",
+    )
+    api_cors_allow_credentials: bool = Field(
+        default=False,
+        description="Whether CORS responses allow credentials",
+    )
 
     # Subsystem configs.
     interceptor: InterceptorConfig = Field(default_factory=InterceptorConfig)
@@ -288,6 +304,11 @@ class PlatformConfig(BaseSettings):
         if self.index_backend not in valid_index_backends:
             raise ValueError(f"index_backend must be one of {sorted(valid_index_backends)}")
 
+        if self.api_ingest_rate_limit_per_minute <= 0:
+            raise ValueError("api_ingest_rate_limit_per_minute must be > 0")
+        if self.api_ingest_max_batch_size <= 0:
+            raise ValueError("api_ingest_max_batch_size must be > 0")
+
         valid_circuit_backends = {"local", "redis"}
         if self.interceptor.circuit_state_backend not in valid_circuit_backends:
             raise ValueError(
@@ -338,5 +359,12 @@ class PlatformConfig(BaseSettings):
             raise ValueError(
                 "redis_url must be configured for redis index/circuit state or kafka dedup backend"
             )
+
+        if production_like and (
+            self.index_backend == "redis"
+            or self.interceptor.circuit_state_backend == "redis"
+            or self.event_bus_backend == "kafka"
+        ) and not self.redis_url.startswith("rediss://"):
+            raise ValueError("redis_url must use rediss:// in production/staging")
 
         return self
