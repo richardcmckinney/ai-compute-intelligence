@@ -18,12 +18,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-gate-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.target_environment || 'staging' }}
+  group: deploy-gate-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment || 'staging' }}
   cancel-in-progress: false
 
 env:
   PYTHON_VERSION: "3.12"
-  TARGET_ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && inputs.target_environment || 'staging' }}
+  TARGET_ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment || 'staging' }}
 
 jobs:
   preflight:
