@@ -24,4 +24,3 @@ The platform wins at the decision moment, not only after-the-fact reporting.
 - Confidence calibration and governance.
 - Operationally safe intervention architecture.
 - Integration-driven workflow lock-in.
-

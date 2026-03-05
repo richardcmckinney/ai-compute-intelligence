@@ -4,7 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - codex/**
 
 permissions:
   contents: read
@@ -37,8 +39,11 @@ jobs:
           python -m pip install -r requirements-dev.lock
           python -m pip install --no-deps -e .
 
-      - name: Ruff runtime-safety lint
-        run: ruff check src/ tests/ --select F
+      - name: Ruff full lint profile
+        run: ruff check src/ tests/
+
+      - name: Mypy strict type check
+        run: mypy src tests --strict
 
       - name: Dependency consistency check
         run: |

@@ -140,7 +140,7 @@ pytest tests/ -v
 
 # Lint and type check.
 ruff check src/ tests/
-mypy src/aci/ --ignore-missing-imports
+mypy src tests --strict
 
 # Run the API server.
 uvicorn aci.api.app:app --reload --port 8000
