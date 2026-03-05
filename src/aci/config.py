@@ -299,6 +299,8 @@ class PlatformConfig(BaseSettings):
 
         non_production_envs = {"development", "dev", "test", "testing", "local"}
         env_name = self.environment.lower()
+        if production_like and not self.auth.enabled:
+            raise ValueError("auth.enabled must be true in production/staging")
         if self.auth.allow_dev_bypass and env_name not in non_production_envs:
             raise ValueError(
                 "auth.allow_dev_bypass may only be enabled in non-production environments"

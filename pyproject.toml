@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "aci-platform"
-version = "0.1.0"
+version = "0.2.0"
 description = "AI Compute Intelligence Platform: application-level cost and carbon attribution for enterprise AI workloads"
 requires-python = ">=3.12"
 dependencies = [

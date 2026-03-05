@@ -77,7 +77,11 @@ class AttributionProcessor:
         calibrate the confidence, and materialize an index entry.
         """
         attrs = event.attributes
-        workload_id = attrs.get("service_name") or attrs.get("cloud_resource_arn") or event.subject_id
+        workload_id = str(
+            attrs.get("service_name")
+            or attrs.get("cloud_resource_arn")
+            or event.subject_id
+        )
 
         # Build reconciliation context from graph state.
         context = self._build_context(workload_id, event.event_time, event.tenant_id)
@@ -94,7 +98,7 @@ class AttributionProcessor:
             # Calibrate the confidence score.
             method = result.explanation.method_used if result.explanation else "unknown"
             primary_method = method.split("+")[0] if "+" in method else method
-            calibrated = self.calibration.calibrate_score(primary_method, result.combined_confidence)
+            calibrated = self.calibration.calibrate(primary_method, result.combined_confidence)
 
             # Update the result with calibrated confidence.
             result = AttributionResult(
@@ -256,11 +260,12 @@ class AttributionProcessor:
 
         # R1: Check for direct identifier mappings in the graph.
         # Look for edges from the workload to known entities.
-        edges = self.graph.get_edges_from(workload_id, at_time=event_time)
-        for edge in edges:
-            target = self.graph.get_node(edge.to_id)
-            if target and target.node_type in (NodeType.TEAM, NodeType.PERSON):
-                ctx.identity_mappings[workload_id] = target.node_id
+        for lookup_id in self._candidate_graph_node_ids(workload_id):
+            edges = self.graph.get_edges_from(lookup_id, at_time=event_time)
+            for edge in edges:
+                target = self.graph.get_node(edge.to_id)
+                if target and target.node_type in (NodeType.TEAM, NodeType.PERSON):
+                    ctx.identity_mappings[workload_id] = target.node_id
 
         # R3: Build naming patterns from team-owned repositories.
         teams = self.graph.get_nodes_by_type(NodeType.TEAM)
@@ -275,6 +280,21 @@ class AttributionProcessor:
                 ctx.naming_patterns[team.node_id] = patterns
 
         return ctx
+
+    @staticmethod
+    def _candidate_graph_node_ids(workload_id: str) -> list[str]:
+        """
+        Return possible graph node IDs for a workload identifier.
+
+        Ingestion can surface raw identifiers (e.g., ARN) while graph nodes may
+        be stored under namespaced IDs (e.g., ``resource:<arn>``).
+        """
+        candidates = [workload_id]
+        prefixes = ("resource:", "endpoint:")
+        if not workload_id.startswith(prefixes):
+            candidates.extend([f"resource:{workload_id}", f"endpoint:{workload_id}"])
+        # Preserve order and remove duplicates.
+        return list(dict.fromkeys(candidates))
 
     @property
     def stats(self) -> dict:

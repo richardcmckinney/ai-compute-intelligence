@@ -97,6 +97,14 @@ class CalibrationEngine:
         # Otherwise, interpolate from the curve points.
         return self._interpolate(curve.raw_scores, curve.calibrated_scores, raw_confidence)
 
+    def calibrate_score(self, method: str, raw_confidence: float) -> float:
+        """
+        Backward-compatible wrapper for older call sites.
+
+        The canonical entrypoint is ``calibrate``.
+        """
+        return self.calibrate(method, raw_confidence)
+
     def add_ground_truth(self, label: GroundTruthLabel) -> None:
         """
         Record a ground truth observation for the calibration loop.

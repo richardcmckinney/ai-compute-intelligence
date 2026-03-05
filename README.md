@@ -173,10 +173,10 @@ Secret scanning is enforced by the `gitleaks` pre-commit hook.
 
 ## Frontend Mockup
 
-The repository now includes two platform mockups:
+The repository includes:
 
-- `frontend/platform-mockup-v3.html`: original source artifact you provided.
-- `frontend/index.html`: improved v4 mockup with stronger information hierarchy, mobile responsiveness, and live fetch to `/v1/dashboard/overview`.
+- `frontend/index.html`: current investor/demo-ready product mockup with responsive layout and live fetch to `/v1/dashboard/overview`.
+- `frontend/platform-mockup-v3.html`: archived reference iteration retained for design traceability.
 
 When running the API, the mockup is served at:
 

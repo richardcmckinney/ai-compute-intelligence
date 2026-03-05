@@ -17,7 +17,7 @@
 ## Vulnerability Reporting
 Security issues should be reported privately using GitHub Security Advisories.
 
-Policy details are documented in `/.github/SECURITY.md`.
+Policy details are documented in `/SECURITY.md`.
 
 ## YC Diligence Perspective
 Security posture is intentionally conservative:

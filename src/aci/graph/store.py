@@ -67,6 +67,10 @@ class GraphStore:
     def get_node(self, node_id: str) -> GraphNode | None:
         return self.nodes.get(node_id)
 
+    def get_nodes_by_type(self, node_type: NodeType) -> list[GraphNode]:
+        """Return all nodes of a specific type."""
+        return [node for node in self.nodes.values() if node.node_type == node_type]
+
     def get_edges_from(
         self,
         node_id: str,
