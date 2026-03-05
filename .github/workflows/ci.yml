@@ -18,6 +18,7 @@ concurrency:
 env:
   PYTHON_VERSION: "3.12"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  UV_VERSION: "0.10.8"
 
 jobs:
   quality-gate:
@@ -52,9 +53,15 @@ jobs:
 
       - name: Verify lockfiles are up to date
         run: |
-          python -m pip install --upgrade uv
-          uv pip compile pyproject.toml --output-file /tmp/requirements.lock
-          uv pip compile pyproject.toml --extra dev --extra glass-jaw --output-file /tmp/requirements-dev.lock
+          python -m pip install --upgrade "uv==${UV_VERSION}"
+          uv pip compile pyproject.toml \
+            --constraints requirements.lock \
+            --output-file /tmp/requirements.lock
+          uv pip compile pyproject.toml \
+            --extra dev \
+            --extra glass-jaw \
+            --constraints requirements-dev.lock \
+            --output-file /tmp/requirements-dev.lock
           grep -E '^[A-Za-z0-9][A-Za-z0-9._-]*==' requirements.lock > /tmp/requirements.lock.expected
           grep -E '^[A-Za-z0-9][A-Za-z0-9._-]*==' /tmp/requirements.lock > /tmp/requirements.lock.generated
           grep -E '^[A-Za-z0-9][A-Za-z0-9._-]*==' requirements-dev.lock > /tmp/requirements-dev.lock.expected

@@ -1,6 +1,9 @@
 name: Deployment Gate
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       target_environment:
@@ -15,11 +18,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-gate-${{ github.ref }}-${{ inputs.target_environment }}
+  group: deploy-gate-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.target_environment || 'staging' }}
   cancel-in-progress: false
 
 env:
   PYTHON_VERSION: "3.12"
+  TARGET_ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && inputs.target_environment || 'staging' }}
 
 jobs:
   preflight:
@@ -47,7 +51,7 @@ jobs:
   deployment-gate:
     runs-on: ubuntu-latest
     needs: preflight
-    environment: ${{ inputs.target_environment }}
+    environment: ${{ env.TARGET_ENVIRONMENT }}
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -65,4 +69,4 @@ jobs:
 
       - name: Record deployment gate result
         run: |
-          echo "Deployment gate passed for environment: ${{ inputs.target_environment }}"
+          echo "Deployment gate passed for environment: ${{ env.TARGET_ENVIRONMENT }}"
