@@ -8,8 +8,7 @@ silently propagating through reconciliation and materialization.
 
 from __future__ import annotations
 
-from datetime import datetime
-
+from datetime import datetime  # noqa: TC003
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError

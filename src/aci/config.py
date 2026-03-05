@@ -77,7 +77,9 @@ class ConfidenceConfig(BaseSettings):
 
     # Default dependency discount for correlated signals (Section 5.3c).
     # Initial value; adjusted per method pair as ground truth accumulates.
-    default_dependency_discount: float = Field(default=0.5, description="Correlated signal discount")
+    default_dependency_discount: float = Field(
+        default=0.5, description="Correlated signal discount"
+    )
 
     # Operational thresholds (Section 5.1).
     chargeback_threshold: float = Field(default=0.80, description="Min confidence for chargeback")
@@ -96,7 +98,7 @@ class ConfidenceConfig(BaseSettings):
     decay_rate: float = Field(default=0.01, description="Daily decay factor")
 
     @model_validator(mode="after")
-    def _validate_threshold_ordering(self) -> "ConfidenceConfig":
+    def _validate_threshold_ordering(self) -> ConfidenceConfig:
         if self.chargeback_threshold <= self.provisional_threshold:
             raise ValueError("chargeback_threshold must be greater than provisional_threshold")
         return self
@@ -273,7 +275,7 @@ class PlatformConfig(BaseSettings):
     neo4j_password: str = Field(default="", description="Neo4j password")
 
     @model_validator(mode="after")
-    def _validate_runtime_settings(self) -> "PlatformConfig":
+    def _validate_runtime_settings(self) -> PlatformConfig:
         valid_roles = {"all", "gateway", "processor"}
         if self.runtime_role not in valid_roles:
             raise ValueError(f"runtime_role must be one of {sorted(valid_roles)}")
@@ -289,8 +291,7 @@ class PlatformConfig(BaseSettings):
         valid_circuit_backends = {"local", "redis"}
         if self.interceptor.circuit_state_backend not in valid_circuit_backends:
             raise ValueError(
-                "interceptor.circuit_state_backend must be one of "
-                f"{sorted(valid_circuit_backends)}"
+                f"interceptor.circuit_state_backend must be one of {sorted(valid_circuit_backends)}"
             )
 
         production_like = self.environment.lower() in {"production", "staging"}
@@ -308,18 +309,22 @@ class PlatformConfig(BaseSettings):
 
         algorithm = self.auth.jwt_algorithm.upper()
         if self.auth.enabled:
-            if algorithm.startswith("HS") and not self.auth.jwt_hs256_secret:
-                if not (env_name in non_production_envs and self.auth.allow_dev_bypass):
-                    raise ValueError("auth.jwt_hs256_secret is required for HS* auth algorithms")
-            if algorithm.startswith("RS") and not self.auth.jwt_public_key_pem:
-                if not (env_name in non_production_envs and self.auth.allow_dev_bypass):
-                    raise ValueError("auth.jwt_public_key_pem is required for RS* auth algorithms")
+            bypass_allowed = env_name in non_production_envs and self.auth.allow_dev_bypass
+            if algorithm.startswith("HS") and not self.auth.jwt_hs256_secret and not bypass_allowed:
+                raise ValueError("auth.jwt_hs256_secret is required for HS* auth algorithms")
+            if (
+                algorithm.startswith("RS")
+                and not self.auth.jwt_public_key_pem
+                and not bypass_allowed
+            ):
+                raise ValueError("auth.jwt_public_key_pem is required for RS* auth algorithms")
 
         if production_like and algorithm.startswith("HS"):
             weak_defaults = {"", "dev-only-secret"}
             if self.auth.jwt_hs256_secret in weak_defaults:
                 raise ValueError(
-                    "auth.jwt_hs256_secret must be set to a strong non-default value in production/staging"
+                    "auth.jwt_hs256_secret must be set to a strong non-default "
+                    "value in production/staging"
                 )
 
         if self.event_bus_backend == "kafka" and not self.kafka_bootstrap:

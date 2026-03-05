@@ -36,7 +36,11 @@ def test_event_ingest_is_idempotent_by_source_and_key() -> None:
     event_payload = {
         "event_type": "inference.request",
         "subject_id": "req-aci-1",
-        "attributes": {"service_name": "customer-support-bot", "model": "gpt-4o-mini", "provider": "openai"},
+        "attributes": {
+            "service_name": "customer-support-bot",
+            "model": "gpt-4o-mini",
+            "provider": "openai",
+        },
         "event_time": datetime.now(UTC).isoformat(),
         "source": "unit-test",
         "idempotency_key": "req-aci-1",

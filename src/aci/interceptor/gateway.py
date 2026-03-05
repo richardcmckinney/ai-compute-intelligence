@@ -23,25 +23,34 @@ import asyncio
 import inspect
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import structlog
 
 from aci.config import InterceptorConfig
-from aci.index.materializer import AttributionIndexStore
 from aci.interceptor.circuit_breaker import CircuitBreaker, CircuitStateStore
 from aci.interceptor.shadow_warming import ShadowWarmer
-from aci.models.attribution import AttributionIndexEntry
 from aci.models.carbon import EnforcementAction, PolicyEvaluationResult
 from aci.models.events import DomainEvent, EventType
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable, Coroutine
+
+    from aci.index.materializer import AttributionIndexStore
+    from aci.models.attribution import AttributionIndexEntry
 
 logger = structlog.get_logger()
 
 
+class EventPublisher(Protocol):
+    def publish(self, event: DomainEvent) -> bool | Coroutine[Any, Any, bool]: ...
+
+
 class DeploymentMode(StrEnum):
     """Interceptor deployment modes (Section 6.4)."""
+
     PASSIVE = "passive"
     ADVISORY = "advisory"
     ACTIVE = "active"
@@ -49,6 +58,7 @@ class DeploymentMode(StrEnum):
 
 class InterceptionOutcome(StrEnum):
     """Possible outcomes of an interception decision."""
+
     PASSTHROUGH = "passthrough"
     ENRICHED = "enriched"
     REDIRECTED = "redirected"
@@ -62,6 +72,7 @@ class InterceptionOutcome(StrEnum):
 @dataclass
 class InterceptionRequest:
     """Incoming inference request to be intercepted."""
+
     request_id: str
     model: str
     provider: str = ""
@@ -71,13 +82,14 @@ class InterceptionRequest:
     estimated_cost_usd: float = 0.0
     headers: dict[str, str] = field(default_factory=dict)
     workload_id: str = ""
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     timestamp: float = field(default_factory=time.time)
 
 
 @dataclass
 class InterceptionResult:
     """Result of interceptor processing."""
+
     outcome: InterceptionOutcome
     request_id: str
     enrichment_headers: dict[str, str] = field(default_factory=dict)
@@ -107,8 +119,8 @@ class FailOpenInterceptor:
         index: AttributionIndexStore,
         config: InterceptorConfig | None = None,
         mode: DeploymentMode = DeploymentMode.ADVISORY,
-        event_bus: Any | None = None,
-        shadow_refresh_fn: Callable | None = None,
+        event_bus: EventPublisher | None = None,
+        shadow_refresh_fn: Callable[[str], Awaitable[None]] | None = None,
         circuit_state_store: CircuitStateStore | None = None,
     ) -> None:
         self.index = index
@@ -209,10 +221,7 @@ class FailOpenInterceptor:
 
             # Shadow warming (Section 6.3): probabilistic background refresh.
             # Only one refresh runs at a time per workload ID.
-            if (
-                self._shadow_refresh_fn
-                and self.shadow_warmer.should_trigger_refresh(workload_id)
-            ):
+            if self._shadow_refresh_fn and self.shadow_warmer.should_trigger_refresh(workload_id):
                 try:
                     loop = asyncio.get_running_loop()
                     loop.create_task(
@@ -275,7 +284,9 @@ class FailOpenInterceptor:
         elif self.mode == DeploymentMode.ADVISORY:
             headers = self._build_enrichment_headers(request, attribution, violations)
             has_violation = any(v.violated for v in violations)
-            outcome = InterceptionOutcome.SOFT_STOPPED if has_violation else InterceptionOutcome.ENRICHED
+            outcome = (
+                InterceptionOutcome.SOFT_STOPPED if has_violation else InterceptionOutcome.ENRICHED
+            )
             elapsed_ms = (time.monotonic() - start) * 1000
             self.circuit_breaker.record_success()
             self.total_enriched += 1
@@ -310,13 +321,15 @@ class FailOpenInterceptor:
 
         # Model allowlist.
         if attribution.model_allowlist and request.model not in attribution.model_allowlist:
-            violations.append(PolicyEvaluationResult(
-                policy_id="model_allowlist",
-                policy_name="Production Model Allowlist",
-                action=EnforcementAction.SOFT_STOP,
-                violated=True,
-                details=f"Model '{request.model}' not in allowlist",
-            ))
+            violations.append(
+                PolicyEvaluationResult(
+                    policy_id="model_allowlist",
+                    policy_name="Production Model Allowlist",
+                    action=EnforcementAction.SOFT_STOP,
+                    violated=True,
+                    details=f"Model '{request.model}' not in allowlist",
+                )
+            )
 
         # Budget ceiling (>90% utilized).
         if (
@@ -326,26 +339,30 @@ class FailOpenInterceptor:
         ):
             utilization = 1.0 - (attribution.budget_remaining_usd / attribution.budget_limit_usd)
             if utilization > 0.9:
-                violations.append(PolicyEvaluationResult(
-                    policy_id="budget_ceiling",
-                    policy_name="Budget Ceiling",
-                    action=EnforcementAction.SOFT_STOP,
-                    violated=True,
-                    details=f"Budget {utilization:.0%} utilized",
-                ))
+                violations.append(
+                    PolicyEvaluationResult(
+                        policy_id="budget_ceiling",
+                        policy_name="Budget Ceiling",
+                        action=EnforcementAction.SOFT_STOP,
+                        violated=True,
+                        details=f"Budget {utilization:.0%} utilized",
+                    )
+                )
 
         # Token budget.
         if (
             attribution.token_budget_output
             and request.metadata.get("max_tokens", 0) > attribution.token_budget_output
         ):
-            violations.append(PolicyEvaluationResult(
-                policy_id="token_budget",
-                policy_name="Token Budget Per Request",
-                action=EnforcementAction.SOFT_STOP,
-                violated=True,
-                details=f"Requested tokens exceed budget of {attribution.token_budget_output}",
-            ))
+            violations.append(
+                PolicyEvaluationResult(
+                    policy_id="token_budget",
+                    policy_name="Token Budget Per Request",
+                    action=EnforcementAction.SOFT_STOP,
+                    violated=True,
+                    details=f"Requested tokens exceed budget of {attribution.token_budget_output}",
+                )
+            )
 
         return violations
 
@@ -391,7 +408,9 @@ class FailOpenInterceptor:
             )
 
         has_violation = any(v.violated for v in violations)
-        outcome = InterceptionOutcome.SOFT_STOPPED if has_violation else InterceptionOutcome.ENRICHED
+        outcome = (
+            InterceptionOutcome.SOFT_STOPPED if has_violation else InterceptionOutcome.ENRICHED
+        )
         elapsed_ms = (time.monotonic() - start) * 1000
         self.total_enriched += 1
         return InterceptionResult(
@@ -452,8 +471,7 @@ class FailOpenInterceptor:
         may reject or truncate unexpectedly.
         """
         clamped = {
-            key: value[: self.config.max_header_value_length]
-            for key, value in headers.items()
+            key: value[: self.config.max_header_value_length] for key, value in headers.items()
         }
 
         max_bytes = self.config.max_enrichment_header_bytes
@@ -514,7 +532,7 @@ class FailOpenInterceptor:
                     "elapsed_ms": elapsed_ms,
                     "interceptor_mode": self.mode.value,
                 },
-                event_time=datetime.now(timezone.utc),
+                event_time=datetime.now(UTC),
                 source="interceptor",
                 idempotency_key=f"shadow:{request_id}",
                 tenant_id="",  # Populated by bus middleware in production.
@@ -522,10 +540,12 @@ class FailOpenInterceptor:
             publish_result = self._event_bus.publish(event)
             if inspect.isawaitable(publish_result):
                 try:
-                    loop = asyncio.get_running_loop()
-                    loop.create_task(publish_result)
+                    asyncio.get_running_loop()
+                    asyncio.ensure_future(
+                        self._drain_shadow_publish(cast("Awaitable[bool]", publish_result))
+                    )
                 except RuntimeError:
-                    asyncio.run(publish_result)
+                    asyncio.run(self._drain_shadow_publish(cast("Awaitable[bool]", publish_result)))
                 return True
 
             return bool(publish_result)
@@ -549,7 +569,14 @@ class FailOpenInterceptor:
                 return normalized
         return ""
 
-    def get_metrics(self) -> dict:
+    async def _drain_shadow_publish(self, publish_result: Awaitable[bool]) -> None:
+        """Best-effort async publish drain for fire-and-forget shadow events."""
+        try:
+            await publish_result
+        except Exception as exc:
+            logger.debug("interceptor.shadow_event.await_failed", error=str(exc))
+
+    def get_metrics(self) -> dict[str, int | str]:
         return {
             "total_requests": self.total_requests,
             "total_enriched": self.total_enriched,
@@ -561,5 +588,5 @@ class FailOpenInterceptor:
         }
 
     @property
-    def stats(self) -> dict:
+    def stats(self) -> dict[str, int | str]:
         return self.get_metrics()

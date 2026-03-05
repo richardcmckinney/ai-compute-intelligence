@@ -11,19 +11,24 @@ critical path. The interceptor reads only from the materialized index.
 
 from __future__ import annotations
 
-from datetime import datetime
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from aci.confidence.calibration import CalibrationEngine
-from aci.core.event_bus import InMemoryEventBus, KafkaEventBus
-from aci.graph.store import GraphStore
-from aci.hre.engine import HeuristicReconciliationEngine, ReconciliationContext
-from aci.index.materializer import IndexMaterializer
+from aci.hre.engine import ReconciliationContext
 from aci.models.attribution import AttributionResult
 from aci.models.events import DomainEvent, EventType
 from aci.models.graph import EdgeProvenance, EdgeType, GraphEdge, GraphNode, NodeType
-from aci.policy.engine import PolicyEngine
+
+if TYPE_CHECKING:
+    from datetime import datetime
+
+    from aci.confidence.calibration import CalibrationEngine
+    from aci.core.event_bus import InMemoryEventBus, KafkaEventBus
+    from aci.graph.store import GraphStore
+    from aci.hre.engine import HeuristicReconciliationEngine
+    from aci.index.materializer import IndexMaterializer
+    from aci.policy.engine import PolicyEngine
 
 logger = structlog.get_logger()
 
@@ -78,9 +83,7 @@ class AttributionProcessor:
         """
         attrs = event.attributes
         workload_id = str(
-            attrs.get("service_name")
-            or attrs.get("cloud_resource_arn")
-            or event.subject_id
+            attrs.get("service_name") or attrs.get("cloud_resource_arn") or event.subject_id
         )
 
         # Build reconciliation context from graph state.
@@ -112,7 +115,7 @@ class AttributionProcessor:
 
             # Collect policy context.
             team_id = result.explanation.target_entity if result.explanation else ""
-            policy_ctx = {}
+            policy_ctx: dict[str, Any] = {}
             if team_id:
                 budget = self.policy_engine.get_budget_context(team_id)
                 allowlist = self.policy_engine.get_model_allowlist(team_id)
@@ -138,41 +141,49 @@ class AttributionProcessor:
 
         # Upsert deployment node.
         deploy_id = f"deploy:{attrs.get('deploy_job_id', event.event_id)}"
-        self.graph.upsert_node(GraphNode(
-            node_id=deploy_id,
-            node_type=NodeType.DEPLOYMENT,
-            label=service_name,
-            properties=attrs,
-        ))
+        self.graph.upsert_node(
+            GraphNode(
+                node_id=deploy_id,
+                node_type=NodeType.DEPLOYMENT,
+                label=service_name,
+                properties=attrs,
+            )
+        )
 
         # Link deployment to resource.
         if target_arn:
-            self.graph.upsert_node(GraphNode(
-                node_id=f"resource:{target_arn}",
-                node_type=NodeType.CLOUD_RESOURCE,
-                label=target_arn.split("/")[-1] if "/" in target_arn else target_arn,
-            ))
-            self.graph.add_edge(GraphEdge(
-                edge_type=EdgeType.TRIGGERS,
-                from_id=deploy_id,
-                to_id=f"resource:{target_arn}",
-                confidence=1.0,
-                weight=1.0,
-                valid_from=event.event_time,
-                provenance=EdgeProvenance(source="cicd", method="R1"),
-            ))
+            self.graph.upsert_node(
+                GraphNode(
+                    node_id=f"resource:{target_arn}",
+                    node_type=NodeType.CLOUD_RESOURCE,
+                    label=target_arn.split("/")[-1] if "/" in target_arn else target_arn,
+                )
+            )
+            self.graph.add_edge(
+                GraphEdge(
+                    edge_type=EdgeType.TRIGGERS,
+                    from_id=deploy_id,
+                    to_id=f"resource:{target_arn}",
+                    confidence=1.0,
+                    weight=1.0,
+                    valid_from=event.event_time,
+                    provenance=EdgeProvenance(source="cicd", method="R1"),
+                )
+            )
 
         # Link deployer to deployment.
         if deployer:
-            self.graph.add_edge(GraphEdge(
-                edge_type=EdgeType.DEPLOYED_BY,
-                from_id=f"person:{deployer}",
-                to_id=deploy_id,
-                confidence=1.0,
-                weight=1.0,
-                valid_from=event.event_time,
-                provenance=EdgeProvenance(source="cicd", method="R1"),
-            ))
+            self.graph.add_edge(
+                GraphEdge(
+                    edge_type=EdgeType.DEPLOYED_BY,
+                    from_id=f"person:{deployer}",
+                    to_id=deploy_id,
+                    confidence=1.0,
+                    weight=1.0,
+                    valid_from=event.event_time,
+                    provenance=EdgeProvenance(source="cicd", method="R1"),
+                )
+            )
 
         self._processed_count += 1
 
@@ -231,15 +242,17 @@ class AttributionProcessor:
 
         if old_team and new_team:
             # Close old membership edge and create new one.
-            self.graph.add_edge(GraphEdge(
-                edge_type=EdgeType.MEMBER_OF,
-                from_id=person_id,
-                to_id=f"team:{new_team}",
-                confidence=1.0,
-                weight=1.0,
-                valid_from=event.event_time,
-                provenance=EdgeProvenance(source="hr", method="R1"),
-            ))
+            self.graph.add_edge(
+                GraphEdge(
+                    edge_type=EdgeType.MEMBER_OF,
+                    from_id=person_id,
+                    to_id=f"team:{new_team}",
+                    confidence=1.0,
+                    weight=1.0,
+                    valid_from=event.event_time,
+                    provenance=EdgeProvenance(source="hr", method="R1"),
+                )
+            )
 
         self._processed_count += 1
 
@@ -297,7 +310,7 @@ class AttributionProcessor:
         return list(dict.fromkeys(candidates))
 
     @property
-    def stats(self) -> dict:
+    def stats(self) -> dict[str, int]:
         return {
             "processed_events": self._processed_count,
             "graph_nodes": self.graph.get_stats()["total_nodes"],

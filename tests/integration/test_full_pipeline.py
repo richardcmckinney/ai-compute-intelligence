@@ -9,12 +9,12 @@ Each test corresponds to a worked example from Section 13 of the patent spec.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from aci.config import PlatformConfig
 from aci.confidence.calibration import CalibrationEngine
+from aci.config import PlatformConfig
 from aci.core.event_bus import InMemoryEventBus
 from aci.graph.store import GraphStore
 from aci.hre.engine import HeuristicReconciliationEngine, ReconciliationContext
@@ -30,7 +30,7 @@ from aci.models.events import DomainEvent, EventType
 from aci.models.graph import EdgeProvenance, EdgeType, GraphEdge, GraphNode, NodeType
 from aci.trac.calculator import TRACCalculator
 
-NOW = datetime(2026, 2, 8, 14, 23, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 2, 8, 14, 23, 0, tzinfo=UTC)
 
 
 @pytest.mark.integration
@@ -54,17 +54,31 @@ class TestFullPipelineExample131:
         self.calibration = CalibrationEngine(self.config.confidence)
         self.trac = TRACCalculator(self.config.trac, self.config.confidence)
         self.interceptor = FailOpenInterceptor(
-            self.index, self.config.interceptor, DeploymentMode.ADVISORY,
+            self.index,
+            self.config.interceptor,
+            DeploymentMode.ADVISORY,
         )
         self._build_graph()
 
     def _build_graph(self) -> None:
         """Populate graph with the Section 13.1 scenario."""
         nodes = [
-            GraphNode(node_id="endpoint:fraud-v2", node_type=NodeType.INFERENCE_ENDPOINT, label="fraud-v2"),
-            GraphNode(node_id="deploy:fraud-42", node_type=NodeType.DEPLOYMENT, label="deploy-fraud-model-prod"),
-            GraphNode(node_id="repo:co/fraud-model-v2", node_type=NodeType.REPOSITORY, label="fraud-model-v2"),
-            GraphNode(node_id="person:jdoe@company.com", node_type=NodeType.PERSON, label="Jane Doe"),
+            GraphNode(
+                node_id="endpoint:fraud-v2", node_type=NodeType.INFERENCE_ENDPOINT, label="fraud-v2"
+            ),
+            GraphNode(
+                node_id="deploy:fraud-42",
+                node_type=NodeType.DEPLOYMENT,
+                label="deploy-fraud-model-prod",
+            ),
+            GraphNode(
+                node_id="repo:co/fraud-model-v2",
+                node_type=NodeType.REPOSITORY,
+                label="fraud-model-v2",
+            ),
+            GraphNode(
+                node_id="person:jdoe@company.com", node_type=NodeType.PERSON, label="Jane Doe"
+            ),
             GraphNode(node_id="team:ML-Fraud", node_type=NodeType.TEAM, label="ML-Fraud"),
             GraphNode(node_id="cc:CC-4521", node_type=NodeType.COST_CENTER, label="CC-4521"),
         ]
@@ -80,10 +94,17 @@ class TestFullPipelineExample131:
             ("person:jdoe@company.com", "team:ML-Fraud", EdgeType.MEMBER_OF),
             ("team:ML-Fraud", "cc:CC-4521", EdgeType.BUDGETED_UNDER),
         ]:
-            self.graph.add_edge(GraphEdge(
-                edge_type=etype, from_id=from_id, to_id=to_id,
-                confidence=1.0, weight=1.0, valid_from=t0, provenance=prov,
-            ))
+            self.graph.add_edge(
+                GraphEdge(
+                    edge_type=etype,
+                    from_id=from_id,
+                    to_id=to_id,
+                    confidence=1.0,
+                    weight=1.0,
+                    valid_from=t0,
+                    provenance=prov,
+                )
+            )
 
     def test_r1_deterministic_attribution(self) -> None:
         """HRE resolves the endpoint to ML-Fraud via deterministic path."""
@@ -121,17 +142,19 @@ class TestFullPipelineExample131:
     @pytest.mark.asyncio
     async def test_interception_enriches_headers(self) -> None:
         """Interceptor enriches response headers for attributed workload."""
-        self.index.materialize(AttributionIndexEntry(
-            workload_id="fraud-v2",
-            team_id="team:ML-Fraud",
-            team_name="ML-Fraud",
-            cost_center_id="cc:CC-4521",
-            confidence=0.95,
-            confidence_tier="chargeback_ready",
-            method_used="R1",
-            budget_remaining_usd=4200.0,
-            budget_limit_usd=10000.0,
-        ))
+        self.index.materialize(
+            AttributionIndexEntry(
+                workload_id="fraud-v2",
+                team_id="team:ML-Fraud",
+                team_name="ML-Fraud",
+                cost_center_id="cc:CC-4521",
+                confidence=0.95,
+                confidence_tier="chargeback_ready",
+                method_used="R1",
+                budget_remaining_usd=4200.0,
+                budget_limit_usd=10000.0,
+            )
+        )
 
         request = InterceptionRequest(
             request_id="req-001",
@@ -173,22 +196,25 @@ class TestFullPipelineExample132:
     def setup_pipeline(self) -> None:
         self.index = AttributionIndexStore()
         self.interceptor = FailOpenInterceptor(
-            self.index, mode=DeploymentMode.ADVISORY,
+            self.index,
+            mode=DeploymentMode.ADVISORY,
         )
-        self.index.materialize(AttributionIndexEntry(
-            workload_id="customer-support-bot",
-            team_id="team:CS-Platform",
-            team_name="CS-Platform",
-            cost_center_id="cc:CC-1200",
-            confidence=0.95,
-            confidence_tier="chargeback_ready",
-            method_used="R1",
-            budget_remaining_usd=1800.0,
-            budget_limit_usd=5000.0,
-            model_allowlist=["gpt-4o-mini", "gpt-4o", "claude-3-haiku"],
-            equivalence_class_id="customer-support-chat",
-            approved_alternatives=["gpt-4o-mini", "claude-3-haiku"],
-        ))
+        self.index.materialize(
+            AttributionIndexEntry(
+                workload_id="customer-support-bot",
+                team_id="team:CS-Platform",
+                team_name="CS-Platform",
+                cost_center_id="cc:CC-1200",
+                confidence=0.95,
+                confidence_tier="chargeback_ready",
+                method_used="R1",
+                budget_remaining_usd=1800.0,
+                budget_limit_usd=5000.0,
+                model_allowlist=["gpt-4o-mini", "gpt-4o", "claude-3-haiku"],
+                equivalence_class_id="customer-support-chat",
+                approved_alternatives=["gpt-4o-mini", "claude-3-haiku"],
+            )
+        )
 
     @pytest.mark.asyncio
     async def test_advisory_mode_enrichment(self) -> None:

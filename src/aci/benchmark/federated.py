@@ -21,8 +21,9 @@ from __future__ import annotations
 
 import math
 import secrets
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
 import structlog
@@ -30,11 +31,13 @@ import structlog
 from aci.config import FBPConfig
 
 logger = structlog.get_logger()
+NoiseFn = Callable[[float], float]
 
 
 # ---------------------------------------------------------------------------
 # Noise mechanisms
 # ---------------------------------------------------------------------------
+
 
 def _continuous_laplace(scale: float, rng: np.random.Generator) -> float:
     """
@@ -71,7 +74,7 @@ def _discrete_laplace(scale: float) -> float:
         # CSPRNG uniform [0, 1).
         u = secrets.SystemRandom().random()
         if u == 0.0:
-            u = 2.0 ** -53  # Smallest positive float64.
+            u = 2.0**-53  # Smallest positive float64.
         return int(math.floor(math.log(u) / math.log(q_param)))
 
     return float(_secure_geometric(q) - _secure_geometric(q))
@@ -83,7 +86,7 @@ class CohortMembership:
 
     org_id: str
     cohort_id: str
-    joined_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    joined_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass
@@ -94,7 +97,7 @@ class BenchmarkMetric:
     metric_name: str
     raw_value: float
     period: str  # e.g., "2026-Q1"
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass
@@ -108,15 +111,19 @@ class CohortBenchmark:
     member_count: int
     epsilon_consumed: float
     period: str
-    published_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    published_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     suppressed: bool = False
     suppression_reason: str = ""
 
 
-class PrivacyBudgetExhausted(Exception):
+class PrivacyBudgetExhaustedError(Exception):
     """Raised when an org's quarterly privacy budget is spent."""
 
     pass
+
+
+# Backward-compatible alias for existing imports.
+PrivacyBudgetExhausted = PrivacyBudgetExhaustedError
 
 
 class FederatedBenchmarkProtocol:
@@ -137,13 +144,18 @@ class FederatedBenchmarkProtocol:
         self.metrics: dict[str, list[BenchmarkMetric]] = {}
         self.budget_consumed: dict[str, float] = {}  # org_id -> epsilon consumed this quarter
         self.rng = np.random.default_rng()
+        self._add_noise: NoiseFn
 
         # Select noise mechanism based on config.
         if self.config.use_secure_noise:
-            self._add_noise = lambda scale: _discrete_laplace(scale)
+            self._add_noise = _discrete_laplace
             logger.info("fbp.noise_mechanism", mechanism="discrete_laplace_csprng")
         else:
-            self._add_noise = lambda scale: _continuous_laplace(scale, self.rng)
+
+            def _add_continuous_noise(scale: float) -> float:
+                return _continuous_laplace(scale, self.rng)
+
+            self._add_noise = _add_continuous_noise
             logger.info("fbp.noise_mechanism", mechanism="continuous_laplace_numpy")
 
         # Sensitivity bounds per metric (Section 11.1).
@@ -209,7 +221,9 @@ class FederatedBenchmarkProtocol:
                 epsilon_consumed=0.0,
                 period=period,
                 suppressed=True,
-                suppression_reason=f"Cohort size {len(members)} < minimum {self.config.min_cohort_size}",
+                suppression_reason=(
+                    f"Cohort size {len(members)} < minimum {self.config.min_cohort_size}"
+                ),
             )
 
         # Anti-differencing rule: check membership churn.
@@ -241,7 +255,7 @@ class FederatedBenchmarkProtocol:
         for member in members:
             consumed = self.budget_consumed.get(member.org_id, 0.0)
             if consumed + epsilon > self.config.epsilon_total_quarterly:
-                raise PrivacyBudgetExhausted(
+                raise PrivacyBudgetExhaustedError(
                     f"Org {member.org_id}: budget {consumed + epsilon:.1f} "
                     f"exceeds quarterly limit {self.config.epsilon_total_quarterly}"
                 )

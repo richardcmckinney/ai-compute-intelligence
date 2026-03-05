@@ -9,11 +9,10 @@ on deployment topology.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -29,9 +28,10 @@ from aci.api.auth import (
     is_auth_required,
     is_public_path,
 )
-from aci.config import PlatformConfig
 from aci.confidence.calibration import CalibrationEngine
+from aci.config import PlatformConfig
 from aci.core.event_bus import (
+    AsyncIdempotencyStore,
     InMemoryEventBus,
     InMemoryIdempotencyStore,
     KafkaEventBus,
@@ -54,12 +54,16 @@ from aci.models.events import DomainEvent, EventType
 from aci.policy.engine import PolicyEngine
 from aci.trac.calculator import TRACCalculator
 
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Awaitable, Callable
+
 logger = structlog.get_logger()
 
 
 # ---------------------------------------------------------------------------
 # Application state (initialized at startup)
 # ---------------------------------------------------------------------------
+
 
 class AppState:
     """Shared application state across request handlers."""
@@ -112,6 +116,7 @@ class AppState:
     def _build_event_bus(self) -> InMemoryEventBus | KafkaEventBus:
         backend = self.config.event_bus_backend.lower()
         if backend == "kafka":
+            idempotency_store: AsyncIdempotencyStore
             if self.config.redis_url:
                 idempotency_store = RedisIdempotencyStore(
                     redis_url=self.config.redis_url,
@@ -153,8 +158,9 @@ state = AppState()
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan: initialize and tear down platform components."""
+    del app
     logger.info("platform.starting", tenant=state.config.tenant_id)
     await state.start()
     yield
@@ -222,6 +228,7 @@ async def enforce_service_auth(
     request.state.auth_claims = claims
     return await call_next(request)
 
+
 # Serve improved platform mockup from the repo.
 frontend_dir = Path(__file__).resolve().parents[3] / "frontend"
 if frontend_dir.exists():
@@ -231,6 +238,7 @@ if frontend_dir.exists():
 # ---------------------------------------------------------------------------
 # Request / Response models
 # ---------------------------------------------------------------------------
+
 
 class RootResponse(BaseModel):
     name: str
@@ -352,6 +360,7 @@ class DashboardOverviewResponse(BaseModel):
 # Routes
 # ---------------------------------------------------------------------------
 
+
 @app.get("/", response_model=RootResponse)
 async def root() -> RootResponse:
     """Root metadata and quick links."""
@@ -423,7 +432,9 @@ async def metrics() -> dict[str, dict[str, Any]]:
 async def ingest_event(req: EventIngestRequest) -> EventIngestResponse:
     """Ingest a single domain event into the append-only bus."""
     if not state.accepts_ingestion:
-        raise HTTPException(status_code=503, detail="event ingestion disabled for this runtime role")
+        raise HTTPException(
+            status_code=503, detail="event ingestion disabled for this runtime role"
+        )
 
     try:
         attributes = validate_event_attributes(req.event_type, req.attributes)
@@ -447,7 +458,9 @@ async def ingest_event(req: EventIngestRequest) -> EventIngestResponse:
 async def ingest_events_batch(req: EventBatchIngestRequest) -> EventBatchIngestResponse:
     """Ingest a batch of domain events with idempotency-aware accounting."""
     if not state.accepts_ingestion:
-        raise HTTPException(status_code=503, detail="event ingestion disabled for this runtime role")
+        raise HTTPException(
+            status_code=503, detail="event ingestion disabled for this runtime role"
+        )
 
     events: list[DomainEvent] = []
     for e in req.events:
@@ -520,12 +533,8 @@ async def intercept(req: InterceptRequest) -> InterceptResponse:
         elapsed_ms=result.elapsed_ms,
         enrichment_headers=result.enrichment_headers,
         redirect_model=result.redirect_model,
-        attribution_team=(
-            result.attribution.team_name if result.attribution else None
-        ),
-        attribution_confidence=(
-            result.attribution.confidence if result.attribution else None
-        ),
+        attribution_team=(result.attribution.team_name if result.attribution else None),
+        attribution_confidence=(result.attribution.confidence if result.attribution else None),
     )
 
 

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import cast
 
 import pytest
 
 from aci.core.event_bus import InMemoryEventBus
 from aci.models.events import DomainEvent, EventType
-
 
 
 def make_event(event_id: str, key: str) -> DomainEvent:
@@ -19,7 +19,7 @@ def make_event(event_id: str, key: str) -> DomainEvent:
             "model": "gpt-4o-mini",
             "provider": "openai",
         },
-        event_time=datetime.now(timezone.utc),
+        event_time=datetime.now(UTC),
         source="unit-test",
         idempotency_key=key,
         tenant_id="test",
@@ -62,8 +62,8 @@ async def test_idempotency_cache_is_bounded_and_evicts_oldest_keys() -> None:
     assert republished_oldest is True
 
     stats = bus.stats
-    assert stats["idempotency_evictions"] >= 1
-    assert stats["idempotency_cache_size"] <= 4
+    assert cast("int", stats["idempotency_evictions"]) >= 1
+    assert cast("int", stats["idempotency_cache_size"]) <= 4
 
 
 @pytest.mark.asyncio

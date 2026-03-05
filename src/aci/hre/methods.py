@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from difflib import SequenceMatcher
 
 import structlog
@@ -23,12 +23,12 @@ logger = structlog.get_logger()
 class ReconciliationSignal:
     """A single reconciliation signal from one method."""
 
-    method: str                  # R1-R6
-    source_entity: str           # The entity being resolved
-    target_entity: str           # The resolved target
-    confidence: float            # Raw (pre-calibration) confidence
+    method: str  # R1-R6
+    source_entity: str  # The entity being resolved
+    target_entity: str  # The resolved target
+    confidence: float  # Raw (pre-calibration) confidence
     signals: list[str] = field(default_factory=list)
-    feature_values: dict = field(default_factory=dict)
+    feature_values: dict[str, object] = field(default_factory=dict)
 
 
 class R1DirectMatch:
@@ -308,7 +308,7 @@ class R5ServiceAccountResolution:
         Combines multiple weak signals: who deployed it most recently,
         who owns the code it runs, who used it most recently.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         scores: dict[str, float] = {}
 
         # Signal 1: Most recent deployer (strongest signal for service accounts).
@@ -394,16 +394,18 @@ class R6ProportionalAllocation:
             # If one team accounts for 90% of usage, confidence is higher.
             confidence = min(0.65, 0.3 + proportion * 0.4)
 
-            signals.append(ReconciliationSignal(
-                method="R6",
-                source_entity=resource_id,
-                target_entity=team_id,
-                confidence=round(confidence, 3),
-                signals=[f"proportional:{team_id}:{proportion:.2f}"],
-                feature_values={
-                    "allocation_weight": round(proportion, 3),
-                    "team_count": len(known_users),
-                },
-            ))
+            signals.append(
+                ReconciliationSignal(
+                    method="R6",
+                    source_entity=resource_id,
+                    target_entity=team_id,
+                    confidence=round(confidence, 3),
+                    signals=[f"proportional:{team_id}:{proportion:.2f}"],
+                    feature_values={
+                        "allocation_weight": round(proportion, 3),
+                        "team_count": len(known_users),
+                    },
+                )
+            )
 
         return signals

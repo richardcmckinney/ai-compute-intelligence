@@ -68,3 +68,16 @@ select = ["E", "F", "I", "N", "W", "UP", "ANN", "B", "SIM", "TCH"]
 python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = [
+    "aiokafka",
+    "aiokafka.*",
+    "locust",
+    "locust.*",
+    "scipy",
+    "scipy.*",
+    "sklearn",
+    "sklearn.*",
+]
+ignore_missing_imports = true

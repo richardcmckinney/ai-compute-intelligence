@@ -16,7 +16,7 @@ import json
 import time
 from dataclasses import asdict, dataclass
 from enum import StrEnum
-from typing import Protocol
+from typing import Protocol, cast
 
 import structlog
 from redis import Redis
@@ -43,11 +43,9 @@ class CircuitBreakerState:
 
 
 class CircuitStateStore(Protocol):
-    def load(self) -> CircuitBreakerState:
-        ...
+    def load(self) -> CircuitBreakerState: ...
 
-    def save(self, state: CircuitBreakerState) -> None:
-        ...
+    def save(self, state: CircuitBreakerState) -> None: ...
 
 
 class LocalCircuitStateStore:
@@ -88,7 +86,7 @@ class RedisCircuitStateStore:
             self.save(state)
             return state
 
-        parsed = json.loads(raw)
+        parsed = json.loads(cast("str", raw))
         return CircuitBreakerState(**parsed)
 
     def save(self, state: CircuitBreakerState) -> None:
@@ -223,7 +221,7 @@ class CircuitBreaker:
         self._safe_save(state)
         logger.info("circuit_breaker.force_closed")
 
-    def get_metrics(self) -> dict:
+    def get_metrics(self) -> dict[str, int | str]:
         """Return circuit breaker metrics for monitoring."""
         state = self._safe_load()
         return {

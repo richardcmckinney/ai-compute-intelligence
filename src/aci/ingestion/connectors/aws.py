@@ -11,7 +11,7 @@ how they are obtained without code changes, and fallback when missing.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -58,7 +58,7 @@ class AWSBillingConnector:
             event_type=EventType.BILLING_LINE_ITEM,
             subject_id=billing.resource_arn or billing.account_id,
             attributes=billing.model_dump(),
-            event_time=datetime.now(timezone.utc),
+            event_time=datetime.now(UTC),
             source="aws-cur",
             idempotency_key=f"aws-cur:{record.get('identity/LineItemId', '')}",
             tenant_id=self.tenant_id,
@@ -98,7 +98,7 @@ class AWSCloudTrailConnector:
 
         return None
 
-    def _transform_resource_event(self, trail_event: dict) -> DomainEvent:
+    def _transform_resource_event(self, trail_event: dict[str, Any]) -> DomainEvent:
         identity = trail_event.get("userIdentity", {})
         return DomainEvent(
             event_type=EventType.RESOURCE_CREATED,
@@ -111,14 +111,14 @@ class AWSCloudTrailConnector:
                 "region": trail_event.get("awsRegion", ""),
             },
             event_time=datetime.fromisoformat(
-                trail_event.get("eventTime", datetime.now(timezone.utc).isoformat())
+                trail_event.get("eventTime", datetime.now(UTC).isoformat())
             ),
             source="aws-cloudtrail",
             idempotency_key=f"cloudtrail:{trail_event.get('eventID', '')}",
             tenant_id=self.tenant_id,
         )
 
-    def _transform_identity_event(self, trail_event: dict) -> DomainEvent:
+    def _transform_identity_event(self, trail_event: dict[str, Any]) -> DomainEvent:
         identity = trail_event.get("userIdentity", {})
         return DomainEvent(
             event_type=EventType.IDENTITY_LOGIN,
@@ -130,7 +130,7 @@ class AWSCloudTrailConnector:
                 "session_context": trail_event.get("requestParameters", {}),
             },
             event_time=datetime.fromisoformat(
-                trail_event.get("eventTime", datetime.now(timezone.utc).isoformat())
+                trail_event.get("eventTime", datetime.now(UTC).isoformat())
             ),
             source="aws-cloudtrail",
             idempotency_key=f"cloudtrail:{trail_event.get('eventID', '')}",
@@ -168,7 +168,7 @@ class BedrockTelemetryConnector:
             subject_id=inference.request_id,
             attributes=inference.model_dump(),
             event_time=datetime.fromisoformat(
-                log_entry.get("timestamp", datetime.now(timezone.utc).isoformat())
+                log_entry.get("timestamp", datetime.now(UTC).isoformat())
             ),
             source="aws-bedrock",
             idempotency_key=f"bedrock:{inference.request_id}",
@@ -176,12 +176,12 @@ class BedrockTelemetryConnector:
         )
 
     @staticmethod
-    def _estimate_cost(log_entry: dict) -> float:
+    def _estimate_cost(log_entry: dict[str, Any]) -> float:
         """Estimate cost from token counts using known Bedrock pricing."""
         # Simplified pricing lookup. In production, this uses a pricing table
         # updated from the AWS Pricing API.
-        input_tokens = log_entry.get("inputTokenCount", 0)
-        output_tokens = log_entry.get("outputTokenCount", 0)
+        input_tokens = float(log_entry.get("inputTokenCount", 0))
+        output_tokens = float(log_entry.get("outputTokenCount", 0))
         model_id = log_entry.get("modelId", "")
 
         # Example rates (per 1K tokens).
@@ -191,5 +191,5 @@ class BedrockTelemetryConnector:
             "amazon.titan-text-express": (0.0002, 0.0006),
         }
 
-        input_rate, output_rate = rates.get(model_id, (0.001, 0.002))
+        input_rate, output_rate = rates.get(str(model_id), (0.001, 0.002))
         return (input_tokens * input_rate + output_tokens * output_rate) / 1000

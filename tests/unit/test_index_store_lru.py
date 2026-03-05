@@ -4,7 +4,6 @@ from aci.index.materializer import AttributionIndexStore
 from aci.models.attribution import AttributionIndexEntry
 
 
-
 def make_entry(workload_id: str) -> AttributionIndexEntry:
     return AttributionIndexEntry(
         workload_id=workload_id,
@@ -15,7 +14,6 @@ def make_entry(workload_id: str) -> AttributionIndexEntry:
         confidence_tier="chargeback_ready",
         method_used="R1",
     )
-
 
 
 def test_lru_eviction_keeps_store_bounded() -> None:
@@ -30,7 +28,6 @@ def test_lru_eviction_keeps_store_bounded() -> None:
     assert store.lookup("b") is not None
     assert store.lookup("c") is not None
     assert store.stats["evictions"] == 1
-
 
 
 def test_lookup_bumps_lru_order() -> None:

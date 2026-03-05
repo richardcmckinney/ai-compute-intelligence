@@ -76,7 +76,9 @@ class PolicyEngine:
                 allowed = policy.parameters.get("allowed_models", [])
                 return [str(model) for model in allowed]
             if policy.scope == "global":
-                global_allowlist = [str(model) for model in policy.parameters.get("allowed_models", [])]
+                global_allowlist = [
+                    str(model) for model in policy.parameters.get("allowed_models", [])
+                ]
         return global_allowlist
 
     def get_budget_context(self, team_id: str) -> dict[str, float]:

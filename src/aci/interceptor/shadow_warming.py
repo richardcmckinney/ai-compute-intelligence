@@ -15,10 +15,14 @@ from __future__ import annotations
 import random
 import time
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import structlog
 
 from aci.config import InterceptorConfig
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 logger = structlog.get_logger()
 
@@ -71,15 +75,12 @@ class ShadowWarmer:
             return False
 
         # Probabilistic gate.
-        if random.random() >= self.config.shadow_warm_probability:
-            return False
-
-        return True
+        return random.random() < self.config.shadow_warm_probability
 
     async def trigger_refresh(
         self,
         workload_id: str,
-        refresh_fn,
+        refresh_fn: Callable[[str], Awaitable[None]],
     ) -> bool:
         """
         Execute a background refresh for a single workload.
@@ -111,7 +112,7 @@ class ShadowWarmer:
             self._state.in_progress.discard(workload_id)
 
     @property
-    def stats(self) -> dict:
+    def stats(self) -> dict[str, int]:
         return {
             "refreshes_completed": self._refresh_count,
             "refreshes_suppressed": self._suppressed_count,

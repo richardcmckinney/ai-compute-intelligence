@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, ClassVar
 
@@ -71,7 +71,7 @@ class DomainEvent(BaseModel):
     attributes: dict[str, Any] = Field(default_factory=dict)
     event_time: datetime = Field(description="When the event occurred in the source system")
     ingest_time: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         description="When the event entered the platform",
     )
     source: str = Field(description="Originating system (e.g., 'aws-cloudwatch', 'okta')")
@@ -97,9 +97,7 @@ class DomainEvent(BaseModel):
     def _validate_attributes_payload_size(cls, value: dict[str, Any]) -> dict[str, Any]:
         encoded = json.dumps(value, default=str, separators=(",", ":")).encode("utf-8")
         if len(encoded) > cls.MAX_ATTRIBUTES_PAYLOAD_BYTES:
-            raise ValueError(
-                f"attributes payload exceeds {cls.MAX_ATTRIBUTES_PAYLOAD_BYTES} bytes"
-            )
+            raise ValueError(f"attributes payload exceeds {cls.MAX_ATTRIBUTES_PAYLOAD_BYTES} bytes")
         return value
 
 
@@ -130,7 +128,7 @@ class DeploymentEvent(BaseModel):
     deploy_job_id: str = ""
     target_environment: str = ""
     target_resource_arn: str = ""
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class BillingLineItem(BaseModel):
@@ -157,5 +155,5 @@ class OrgChangeEvent(BaseModel):
     new_team: str = ""
     previous_manager: str = ""
     new_manager: str = ""
-    effective_date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    effective_date: datetime = Field(default_factory=lambda: datetime.now(UTC))
     source_system: str = "workday"

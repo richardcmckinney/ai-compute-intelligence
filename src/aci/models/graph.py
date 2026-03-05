@@ -13,7 +13,7 @@ attribution as it was at any historical point, not just as it is now.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -37,28 +37,28 @@ class NodeType(StrEnum):
     COST_CENTER = "cost_center"
 
     # Extended v2.0 types for real enterprise environments.
-    SERVICE_ACCOUNT = "service_account"     # Shared accounts that break identity resolution.
-    API_KEY = "api_key"                     # API keys that mediate access to models.
+    SERVICE_ACCOUNT = "service_account"  # Shared accounts that break identity resolution.
+    API_KEY = "api_key"  # API keys that mediate access to models.
     INFERENCE_ENDPOINT = "inference_endpoint"  # Logical endpoint aggregating cloud resources.
-    EQUIVALENCE_CLASS = "equivalence_class"   # Model groupings for capability equivalence.
-    BUDGET = "budget"                       # GL codes and budget allocations.
+    EQUIVALENCE_CLASS = "equivalence_class"  # Model groupings for capability equivalence.
+    BUDGET = "budget"  # GL codes and budget allocations.
 
 
 class EdgeType(StrEnum):
     """Relationship types between graph nodes."""
 
-    INVOKES = "invokes"               # Service -> Model
-    DEPLOYED_ON = "deployed_on"       # Service -> CloudResource
-    DEPLOYED_BY = "deployed_by"       # Deployment -> Person or ServiceAccount
-    OWNS_CODE = "owns_code"           # Person/Team -> Repository
-    MEMBER_OF = "member_of"           # Person -> Team
-    REPORTS_TO = "reports_to"         # Team -> CostCenter (or Person -> Person)
-    AUTHENTICATES = "authenticates"   # APIKey -> Person or ServiceAccount
-    RESOLVED_TO = "resolved_to"      # ServiceAccount -> Person (probabilistic)
+    INVOKES = "invokes"  # Service -> Model
+    DEPLOYED_ON = "deployed_on"  # Service -> CloudResource
+    DEPLOYED_BY = "deployed_by"  # Deployment -> Person or ServiceAccount
+    OWNS_CODE = "owns_code"  # Person/Team -> Repository
+    MEMBER_OF = "member_of"  # Person -> Team
+    REPORTS_TO = "reports_to"  # Team -> CostCenter (or Person -> Person)
+    AUTHENTICATES = "authenticates"  # APIKey -> Person or ServiceAccount
+    RESOLVED_TO = "resolved_to"  # ServiceAccount -> Person (probabilistic)
     ATTRIBUTED_TO = "attributed_to"  # InferenceEndpoint -> Team
     BUDGETED_UNDER = "budgeted_under"  # Team -> Budget / CostCenter
     CLASSIFIED_AS = "classified_as"  # Model -> EquivalenceClass
-    TRIGGERS = "triggers"            # Deployment -> CloudResource
+    TRIGGERS = "triggers"  # Deployment -> CloudResource
 
 
 class GraphNode(BaseModel):
@@ -74,8 +74,8 @@ class GraphNode(BaseModel):
     label: str = Field(description="Human-readable display name")
     properties: dict[str, Any] = Field(default_factory=dict)
     tenant_id: str = ""
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class EdgeProvenance(BaseModel):
@@ -93,7 +93,7 @@ class EdgeProvenance(BaseModel):
         default_factory=list,
         description="Contributing signal identifiers",
     )
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class GraphEdge(BaseModel):
@@ -148,7 +148,7 @@ class GraphEdge(BaseModel):
         confidence: float = 1.0,
         weight: float = 1.0,
         source: str = "system",
-    ) -> "GraphEdge":
+    ) -> GraphEdge:
         """Convenience constructor for deterministic edge creation."""
         return cls(
             edge_type=edge_type,

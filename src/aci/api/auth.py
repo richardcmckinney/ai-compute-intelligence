@@ -4,12 +4,13 @@ JWT authentication helpers for API request authorization.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import jwt
 from jwt import InvalidTokenError
 
-from aci.config import AuthConfig, PlatformConfig
+if TYPE_CHECKING:
+    from aci.config import AuthConfig, PlatformConfig
 
 PUBLIC_PATH_PREFIXES = ("/platform",)
 PUBLIC_PATHS = {"/", "/health", "/live", "/ready", "/metrics"}
@@ -72,7 +73,7 @@ def _jwt_key(config: AuthConfig) -> str:
     return config.jwt_public_key_pem
 
 
-def _normalize_scopes(raw_scope: Any) -> set[str]:
+def _normalize_scopes(raw_scope: object | None) -> set[str]:
     if raw_scope is None:
         return set()
     if isinstance(raw_scope, str):

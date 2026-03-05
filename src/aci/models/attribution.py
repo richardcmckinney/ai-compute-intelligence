@@ -10,7 +10,7 @@ constant-time O(1) decision-time enforcement.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -61,7 +61,7 @@ class AttributionIndexEntry(BaseModel):
 
     # Index metadata.
     version: int = Field(default=1, description="Index entry version for cache coherence")
-    materialized_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    materialized_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     source_event_ids: list[str] = Field(
         default_factory=list,
         description="Event IDs that contributed to this materialization",
@@ -137,7 +137,7 @@ class ExplanationArtifact(BaseModel):
         description="Other possible attributions with their confidence scores",
     )
     conflict_state: str | None = None
-    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 # Ensure forward references are resolved deterministically for runtime validators.

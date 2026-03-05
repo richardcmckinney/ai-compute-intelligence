@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from aci.graph.store import GraphStore
 from aci.models.graph import EdgeProvenance, EdgeType, GraphEdge, GraphNode, NodeType
 
 
-
 def test_add_edge_closes_previous_active_edge() -> None:
     store = GraphStore()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     store.upsert_node(
         GraphNode(
@@ -51,10 +50,9 @@ def test_add_edge_closes_previous_active_edge() -> None:
     assert stats["historical_edges"] == 1
 
 
-
 def test_get_edges_from_uses_indexed_subset_and_time_filter() -> None:
     store = GraphStore()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     store.upsert_node(
         GraphNode(

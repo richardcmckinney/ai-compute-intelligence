@@ -66,6 +66,7 @@ def _make_request(request_id: str = "req-001") -> InterceptionRequest:
 # Criterion 1: P99 Latency <= 15ms
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.glass_jaw
 class TestLatencyBudget:
     """
@@ -81,7 +82,8 @@ class TestLatencyBudget:
         for i in range(10_000):
             self.store.materialize(_make_index_entry(f"service-{i}"))
         self.interceptor = FailOpenInterceptor(
-            self.store, mode=DeploymentMode.ADVISORY,
+            self.store,
+            mode=DeploymentMode.ADVISORY,
         )
 
     @pytest.mark.asyncio
@@ -127,6 +129,7 @@ class TestLatencyBudget:
     @pytest.mark.asyncio
     async def test_concurrent_requests_under_budget(self) -> None:
         """Concurrent interceptions should not degrade latency."""
+
         async def timed_intercept(i: int) -> float:
             start = time.monotonic()
             await self.interceptor.intercept(
@@ -150,6 +153,7 @@ class TestLatencyBudget:
 # Criterion 2: Zero Request Failures
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.glass_jaw
 class TestZeroFailures:
     """Every request must complete without error, including cache misses."""
@@ -159,7 +163,8 @@ class TestZeroFailures:
         for i in range(100):
             self.store.materialize(_make_index_entry(f"svc-{i}"))
         self.interceptor = FailOpenInterceptor(
-            self.store, mode=DeploymentMode.ADVISORY,
+            self.store,
+            mode=DeploymentMode.ADVISORY,
         )
 
     @pytest.mark.asyncio
@@ -202,6 +207,7 @@ class TestZeroFailures:
 # Criterion 4: Memory Footprint <= 256MB
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.glass_jaw
 class TestMemoryFootprint:
     """Index with realistic cardinality must stay under 256MB."""
@@ -214,6 +220,7 @@ class TestMemoryFootprint:
         ~10K unique workload identifiers across all teams.
         """
         import tracemalloc
+
         tracemalloc.start()
 
         store = AttributionIndexStore()
@@ -245,6 +252,7 @@ class TestMemoryFootprint:
 # Criterion 5: Fail-Open Under Chaos
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.glass_jaw
 class TestFailOpenChaos:
     """
@@ -261,6 +269,7 @@ class TestFailOpenChaos:
     async def test_timeout_produces_fail_open(self) -> None:
         """Timeout produces FAIL_OPEN, not an error."""
         from aci.config import InterceptorConfig
+
         # Set impossibly tight timeout.
         config = InterceptorConfig(timeout_ms=0)
         interceptor = FailOpenInterceptor(self.store, config, DeploymentMode.ADVISORY)

@@ -16,16 +16,19 @@ import inspect
 import json
 from collections import defaultdict, deque
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from datetime import datetime
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import structlog
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
-from aiokafka.structs import TopicPartition
 from redis.asyncio import Redis as AsyncRedis
 
 from aci.core.event_schema import validate_domain_event
 from aci.models.events import DomainEvent
+
+if TYPE_CHECKING:
+    from aiokafka.structs import TopicPartition
 
 logger = structlog.get_logger()
 
@@ -33,11 +36,9 @@ EventHandler = Callable[[DomainEvent], None | Awaitable[None]]
 
 
 class AsyncIdempotencyStore(Protocol):
-    async def seen_or_add(self, key: str) -> bool:
-        ...
+    async def seen_or_add(self, key: str) -> bool: ...
 
-    async def close(self) -> None:
-        ...
+    async def close(self) -> None: ...
 
 
 class InMemoryIdempotencyStore:
@@ -233,7 +234,7 @@ class InMemoryEventBus:
         return results
 
     @property
-    def stats(self) -> dict:
+    def stats(self) -> dict[str, object]:
         return {
             "backend": "memory",
             "started": True,
@@ -271,7 +272,7 @@ class KafkaEventBus:
 
         self._producer: AIOKafkaProducer | None = None
         self._consumer: AIOKafkaConsumer | None = None
-        self._consumer_task: asyncio.Task | None = None
+        self._consumer_task: asyncio.Task[None] | None = None
 
         self._started = False
         self._published_count = 0
@@ -316,10 +317,8 @@ class KafkaEventBus:
 
         if self._consumer_task:
             self._consumer_task.cancel()
-            try:
+            with suppress(asyncio.CancelledError):
                 await self._consumer_task
-            except asyncio.CancelledError:
-                pass
             self._consumer_task = None
 
         if self._consumer is not None:
@@ -453,7 +452,7 @@ class KafkaEventBus:
         await self._producer.send_and_wait(
             self._dlq_topic,
             value=json.dumps(dlq_envelope).encode("utf-8"),
-            key=f"{topic_partition.topic}:{topic_partition.partition}:{offset}".encode("utf-8"),
+            key=f"{topic_partition.topic}:{topic_partition.partition}:{offset}".encode(),
         )
         self._dlq_count += 1
 
@@ -481,7 +480,7 @@ class KafkaEventBus:
         return []
 
     @property
-    def stats(self) -> dict:
+    def stats(self) -> dict[str, object]:
         return {
             "backend": "kafka",
             "started": self._started,

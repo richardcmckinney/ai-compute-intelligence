@@ -16,6 +16,7 @@ import json
 from collections import OrderedDict
 from datetime import UTC, datetime
 from threading import RLock
+from typing import Any, cast
 
 import structlog
 from redis import Redis
@@ -120,7 +121,7 @@ class AttributionIndexStore:
             return self._hit_count / total if total > 0 else 0.0
 
     @property
-    def stats(self) -> dict:
+    def stats(self) -> dict[str, object]:
         with self._lock:
             total = self._hit_count + self._miss_count
             hit_rate = self._hit_count / total if total > 0 else 0.0
@@ -227,7 +228,7 @@ class AttributionIndexStore:
                 with self._lock:
                     self._durable_misses += 1
                 return None
-            return AttributionIndexEntry.model_validate_json(raw)
+            return AttributionIndexEntry.model_validate_json(cast("str", raw))
         except (RedisError, ValueError):
             with self._lock:
                 self._durable_errors += 1
@@ -266,7 +267,7 @@ class IndexMaterializer:
     def materialize_attribution(
         self,
         result: AttributionResult,
-        policies: dict | None = None,
+        policies: dict[str, Any] | None = None,
     ) -> AttributionIndexEntry:
         """
         Transform a full AttributionResult into a compact index entry.
@@ -348,10 +349,10 @@ class IndexMaterializer:
     @staticmethod
     def _apply_policy_context(
         entry: AttributionIndexEntry,
-        policies: dict,
+        policies: dict[str, Any],
     ) -> AttributionIndexEntry:
         """Pre-evaluate and embed policy constraints into the index entry."""
-        updates: dict = {}
+        updates: dict[str, Any] = {}
 
         if "model_allowlist" in policies:
             updates["model_allowlist"] = policies["model_allowlist"]

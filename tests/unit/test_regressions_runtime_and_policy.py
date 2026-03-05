@@ -4,8 +4,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from aci.config import AuthConfig, PlatformConfig
 from aci.confidence.calibration import CalibrationEngine
+from aci.config import AuthConfig, PlatformConfig
 from aci.core.event_bus import InMemoryEventBus
 from aci.core.processor import AttributionProcessor
 from aci.graph.store import GraphStore
@@ -49,9 +49,9 @@ def test_build_context_supports_namespaced_resource_node_ids() -> None:
         event_time=datetime.now(UTC),
         tenant_id="tenant-a",
     )
-    assert ctx.identity_mappings[
-        "arn:aws:sagemaker:us-east-1:123:endpoint/fraud-v2"
-    ] == "team:ml-core"
+    assert (
+        ctx.identity_mappings["arn:aws:sagemaker:us-east-1:123:endpoint/fraud-v2"] == "team:ml-core"
+    )
 
 
 def test_policy_engine_applies_team_specific_over_global() -> None:
