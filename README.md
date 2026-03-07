@@ -185,19 +185,6 @@ See:
 - [docs/architecture.md](docs/architecture.md)
 - [docs/releasing.md](docs/releasing.md)
 
-## CI/CD and Reproducibility
-
-GitHub Actions workflows in [`.github/workflows`](.github/workflows):
-
-- `ci.yml`: lint, strict mypy, dependency checks, lockfile consistency, unit/integration/glass-jaw tests, docker smoke, SBOM artifact.
-- `codeql.yml`: static analysis.
-- `dependency-review.yml`: dependency risk gate on PRs.
-- `deploy-gate.yml`: preflight + deployability gate (`push` to `main` and manual dispatch).
-- `cache-hygiene.yml`: periodic cache maintenance.
-- `release.yml`: version tagging, changelog generation, PyPI and Docker publishing, GitHub release creation.
-
-Dependency reproducibility is anchored by `requirements.lock` and `requirements-dev.lock`.
-
 ## Performance and Validation
 
 - Glass-jaw suite: `tests/glass_jaw/`
@@ -211,18 +198,18 @@ mypy src tests --strict
 pytest -q
 ```
 
-## CI/CD
+## CI/CD and Reproducibility
 
 GitHub Actions workflows in [`.github/workflows`](.github/workflows):
 
 - `ci.yml`: lint, strict mypy, dependency checks, lockfile consistency, unit/integration/glass-jaw tests, docker smoke, SBOM artifact.
 - `codeql.yml`: static analysis.
 - `dependency-review.yml`: dependency risk gate on PRs.
-- `deploy-gate.yml`: preflight and deployability gate.
+- `deploy-gate.yml`: preflight + deployability gate (`push` to `main` and manual dispatch).
 - `cache-hygiene.yml`: periodic cache maintenance.
-- `release.yml`: manual SemVer release with quality gate, artifact build, and GitHub release publication.
+- `release.yml`: manual SemVer release with quality gate, artifact assembly, immutable tag, and GitHub release publication.
 
-See [docs/releasing.md](docs/releasing.md) for the operator guide on cutting releases.
+Dependency reproducibility is anchored by `requirements.lock` and `requirements-dev.lock`.
 
 ## Repository Layout
 

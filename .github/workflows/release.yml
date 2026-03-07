@@ -112,19 +112,14 @@ jobs:
           cp requirements.lock requirements-dev.lock release-assets/
           commit_sha="$(git rev-parse HEAD)"
 
-          python3 -c "
-import json, os, sys
-data = {
-    'release_tag': os.environ['MANIFEST_TAG'],
-    'release_name': os.environ['MANIFEST_RELEASE_NAME'],
-    'target_ref': os.environ['MANIFEST_TARGET_REF'],
-    'commit_sha': sys.argv[1],
-    'prerelease': os.environ['MANIFEST_PRERELEASE'].lower() == 'true',
-}
-with open('release-assets/release-manifest.json', 'w') as f:
-    json.dump(data, f, indent=2)
-    f.write('\n')
-" "${commit_sha}"
+          jq -n \
+            --arg release_tag "${{ needs.resolve-release.outputs.tag_name }}" \
+            --arg release_name "${{ needs.resolve-release.outputs.release_name }}" \
+            --arg target_ref "${{ needs.resolve-release.outputs.target_ref }}" \
+            --arg commit_sha "${commit_sha}" \
+            --argjson prerelease ${{ needs.resolve-release.outputs.prerelease }} \
+            '{release_tag:$release_tag,release_name:$release_name,target_ref:$target_ref,commit_sha:$commit_sha,prerelease:$prerelease}' \
+            > release-assets/release-manifest.json
 
           (
             cd release-assets
