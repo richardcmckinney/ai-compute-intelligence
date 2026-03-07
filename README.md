@@ -20,6 +20,28 @@ Prerequisites:
 - Python `3.12+`
 - `bash`
 
+Get into the repository root first.
+
+If you cloned the repository:
+
+```bash
+git clone https://github.com/richardcmckinney/ai-compute-intelligence.git
+cd ai-compute-intelligence
+```
+
+If you downloaded the ZIP from GitHub:
+
+```bash
+cd /path/to/where/you/unzipped/ai-compute-intelligence
+```
+
+You are in the correct directory if `ls` shows files such as:
+
+- `README.md`
+- `pyproject.toml`
+- `scripts/`
+- `frontend/`
+
 ```bash
 ./scripts/run_demo.sh
 ```
@@ -35,6 +57,13 @@ ACI_DEMO_PORT=8010 ./scripts/run_demo.sh
 ```
 
 Then open `http://localhost:8010/platform/`.
+
+If you prefer not to `cd` into the repo first, you can also launch it with an
+absolute path:
+
+```bash
+/absolute/path/to/ai-compute-intelligence/scripts/run_demo.sh
+```
 
 `./scripts/run_demo.sh` launches the explicit `demo` profile:
 
@@ -79,7 +108,7 @@ For an automated end-to-end demo verification, run `./scripts/smoke_demo.sh`.
   - `ACI_INDEX_BACKEND=memory`
   - `ACI_INTERCEPTOR_CIRCUIT_STATE_BACKEND=local`
 
-This is the recommended profile for investor and reviewer walkthroughs because it is deterministic,
+This is the recommended profile because it is deterministic,
 single-process, and pre-seeded.
 
 ### Shared-backend profile
@@ -110,18 +139,14 @@ The frontend investor demo now includes the minimum scope from PRD Section 15:
 
 ```mermaid
 flowchart LR
-  A["Ingestion"] --> B["Reconciliation (HRE)"]
-  B --> C["Attribution Graph"]
-  C --> D["Materialization"]
-  D --> E["Interception"]
-  E --> F["Reporting"]
-
-  S["Billing / CI-CD / Identity / Runtime"] --> A
-  A --> K[("Event Bus")]
-  K --> B
-  B --> G[("Graph Store")]
-  D --> R[("Attribution Index")]
-  R --> E
+  S["Data Sources<br/>Billing / CI-CD / Identity / Runtime"] --> I["Ingestion"]
+  I --> K[("Event Bus")]
+  K --> H["Reconciliation (HRE)"]
+  H --> G[("Graph Store (Tier 1)<br/>Authoritative Attribution Graph")]
+  G --> M["Materialization"]
+  M --> R[("Attribution Index (Tier 2)")]
+  R --> X["Interception"]
+  R --> P["Reporting"]
 ```
 
 ## Technical Guarantees
@@ -168,7 +193,7 @@ flowchart LR
 - `POST /v1/integrations/notify`
 - `GET /v1/integrations/deliveries`
 
-## Security and Production Hardening
+## Security Posture
 
 Implemented controls include:
 
@@ -176,7 +201,7 @@ Implemented controls include:
 - Startup-time guardrails preventing unsafe production config.
 - Ingestion rate limiting and batch-size bounds.
 - Durable-bus idempotency with tenant-scoped dedup keys.
-- Kubernetes baseline hardening (`runAsNonRoot`, dropped capabilities, read-only root filesystem, probes, PDBs, network policies).
+- Kubernetes security baseline (`runAsNonRoot`, dropped capabilities, read-only root filesystem, probes, PDBs, network policies).
 - Dependency and static-analysis gates in CI (ruff, strict mypy, pytest, CodeQL, dependency review).
 
 See:
@@ -187,7 +212,7 @@ See:
 
 ## Performance and Validation
 
-- Glass-jaw suite: `tests/glass_jaw/`
+- Latency and fail-open validation suite: `tests/glass_jaw/`
 - Unit/integration coverage across API, event bus, graph, policy, interception, and regression controls.
 
 Run quality gates locally:
@@ -202,7 +227,7 @@ pytest -q
 
 GitHub Actions workflows in [`.github/workflows`](.github/workflows):
 
-- `ci.yml`: lint, strict mypy, dependency review, lockfile consistency, unit/integration/glass-jaw tests, Docker smoke, and SBOM artifact.
+- `ci.yml`: lint, strict mypy, dependency review, lockfile consistency, unit/integration/latency tests, Docker smoke, and SBOM artifact.
 - `codeql.yml`: static analysis.
 - `dependency-review.yml`: dependency risk gate on PRs.
 - `cache-hygiene.yml`: periodic cache maintenance.
@@ -231,7 +256,7 @@ frontend/         Investor-facing demo UI
 k8s/base/         Reference Kubernetes manifests
 infra/onboarding/ CloudFormation/Terraform onboarding templates
 docs/             Technical documentation
-tests/            Unit, integration, and glass-jaw validation suites
+tests/            Unit, integration, and latency/fail-open validation suites
 wiki-src/         GitHub wiki source
 ```
 

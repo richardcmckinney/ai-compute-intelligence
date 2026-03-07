@@ -5,8 +5,8 @@
 - Read-only integrations by default.
 - No hard dependency of application availability on platform availability.
 - Kubernetes default-deny network policies enforced.
-- Gateway pod egress restricted to DNS and attribution index only.
-- Kafka and Neo4j reachable only by processor pods.
+- Gateway pod egress restricted to DNS, the attribution index, and Kafka shadow-event publication.
+- Neo4j is reachable only by processor pods; Kafka is reachable by the processor tier and the gateway publisher path.
 
 ## Repository Controls
 - CodeQL static analysis.
@@ -19,7 +19,7 @@ Security issues should be reported privately using GitHub Security Advisories.
 
 Policy details are documented in `/SECURITY.md`.
 
-## Technical Diligence Perspective
+## Security Posture
 Security posture is intentionally conservative:
 - explicit threat surface reduction,
 - predictable CI controls,

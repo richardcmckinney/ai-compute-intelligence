@@ -1,13 +1,13 @@
 # Technical Due Diligence Guide
 
-This page is intended for technical reviewers evaluating architecture quality, execution rigor, and production readiness.
+This page summarizes the primary technical signals for architecture quality, execution rigor, and production readiness.
 
-## Reviewer Checklist
+## Assessment Guide
 
 1. Verify deterministic hot-path behavior in the interceptor.
 2. Validate fail-open semantics under timeout/error scenarios.
 3. Confirm strict schema validation before event-bus ingress.
-4. Inspect security controls (auth, tenancy, hardening baselines).
+4. Inspect security controls (auth, tenancy, infrastructure baselines).
 5. Review quality gates and test coverage depth.
 
 ## What to Inspect First
@@ -35,7 +35,7 @@ This page is intended for technical reviewers evaluating architecture quality, e
 - Durable-bus + deduplication semantics with DLQ and lag instrumentation.
 - Strict CI profile (`ruff`, strict `mypy`, tests, static/dependency analysis).
 
-## Residual Review Areas
+## Deployment Considerations
 
 - Environment-specific integrations (cloud/IdP connectors) are deployment-context dependent.
 - Production secrets/KMS integration should be validated in target customer environments.

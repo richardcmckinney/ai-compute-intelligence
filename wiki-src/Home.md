@@ -3,11 +3,11 @@
 Welcome. This wiki is optimized for technical and business diligence.
 
 ## Quick Links
-- [Platform Overview](https://github.com/richardcmckinney/ai-compute-intelligence/wiki/Platform-Overview)
-- [Technical Architecture](https://github.com/richardcmckinney/ai-compute-intelligence/wiki/Technical-Architecture)
-- [Security and Trust Boundary](https://github.com/richardcmckinney/ai-compute-intelligence/wiki/Security-and-Trust-Boundary)
-- [Operations and Deployment](https://github.com/richardcmckinney/ai-compute-intelligence/wiki/Operations-and-Deployment)
-- [Technical Due Diligence Guide](https://github.com/richardcmckinney/ai-compute-intelligence/wiki/Technical-Due-Diligence-Guide)
+- [Platform Overview](Platform-Overview.md)
+- [Technical Architecture](Technical-Architecture.md)
+- [Security and Trust Boundary](Security-and-Trust-Boundary.md)
+- [Operations and Deployment](Operations-and-Deployment.md)
+- [Technical Due Diligence Guide](Technical-Due-Diligence-Guide.md)
 
 ## What This Platform Does
 AI Compute Intelligence helps enterprises understand and optimize AI spend at decision time.
@@ -23,7 +23,8 @@ Core value:
 - O(1) decision-time path via precomputed attribution index.
 - Security-first deployment inside customer trust boundaries.
 
-## Current Maturity
-- CI, CodeQL, dependency review, Dependabot configured.
-- Security policy and private vulnerability intake enabled.
-- Staging and production environments configured for deployment gates.
+## Operational Posture
+- Authenticated `/v1/*` API surface with tenant-scoped JWT validation.
+- Role-segregated gateway and processor runtime profiles.
+- O(1) decision-time serving path backed by a materialized attribution index.
+- CI, CodeQL, dependency review, and release workflow configured in-repo.

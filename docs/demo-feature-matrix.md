@@ -31,17 +31,6 @@ This matrix maps the investor demo implementation to product and engineering req
 | FR-304 Advisory headers | Interceptor emits bounded `X-ACI-*` headers including cost, owner, confidence, advisory details, fail-open reason, and `X-ACI-Price-Snapshot-Id` |
 | FR-301/FR-309 Fail-open posture | Fail-open scenario in execution stream + governance fail-open matrix |
 
-## Reviewer Feedback Alignment
-
-| Feedback Theme | Implemented Update |
-|---|---|
-| Remove carbon and benchmarking references | Removed from canonical demo UI/data/docs |
-| Separate financial and technical context | Overview is financial-first; request-level data moved to collapsible execution drawer + attribution view |
-| Intervention actions must work | Approve/reject/dismiss/review actions mutate state, persist for session, and update overview savings |
-| Add methodology transparency | Intervention cards + FAQ + glossary include category, threshold condition, and conditional rule definitions |
-| Improve architecture visuals | Vector diagram with bi-directional flow arrows and labeled control/feedback paths |
-| Improve mode indicator clarity | Clickable top-bar mode control with explicit Passive/Advisory/Active behavior |
-
 ## Demo Entry Points
 
 - One-command launch: `./scripts/run_demo.sh`
