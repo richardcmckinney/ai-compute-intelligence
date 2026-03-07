@@ -43,6 +43,9 @@ data:
   ACI_AUTH_REQUIRED_SCOPE: "aci.api"
   ACI_AUTH_TENANT_CLAIM: "tenant_id"
   ACI_AUTH_CLOCK_SKEW_SECONDS: "60"
+  ACI_API_INGEST_RATE_LIMIT_BACKEND: "redis"
+  ACI_API_MAX_REQUEST_BYTES: "1048576"
+  ACI_API_TRUSTED_PROXY_CIDRS: ""
   ACI_CONFIDENCE_CAP: "0.95"
   ACI_CONFIDENCE_CHARGEBACK_THRESHOLD: "0.80"
   ACI_CONFIDENCE_PROVISIONAL_THRESHOLD: "0.50"
@@ -73,7 +76,7 @@ stringData:
   ACI_REDIS_URL: "rediss://replace-with-managed-redis:6379/0"
 ---
 # Deployment: gateway role (decision-time interceptor).
-# This tier is intentionally isolated: it only needs Redis index access.
+# This tier reads the Redis attribution index and publishes shadow events to Kafka.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -132,9 +135,9 @@ spec:
             - name: ACI_RUNTIME_ROLE
               value: gateway
             - name: ACI_EVENT_BUS_BACKEND
-              value: memory
+              value: kafka
             - name: ACI_INTERCEPTOR_SHADOW_EVENTS_ENABLED
-              value: "false"
+              value: "true"
           volumeMounts:
             - name: tmp
               mountPath: /tmp
@@ -379,7 +382,7 @@ spec:
         - port: 8000
           protocol: TCP
 ---
-# Gateway egress: DNS + Redis only.
+# Gateway egress: DNS + Redis + Kafka.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -411,6 +414,13 @@ spec:
               app: redis
       ports:
         - port: 6379
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
+              app: kafka
+      ports:
+        - port: 9092
           protocol: TCP
 ---
 # Processor egress: DNS + Kafka + Neo4j + Redis.
@@ -487,7 +497,7 @@ spec:
         - port: 6379
           protocol: TCP
 ---
-# Kafka ingress: processor only.
+# Kafka ingress: gateway + processor.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -501,6 +511,10 @@ spec:
     - Ingress
   ingress:
     - from:
+        - podSelector:
+            matchLabels:
+              app: aci-platform
+              component: gateway
         - podSelector:
             matchLabels:
               app: aci-platform

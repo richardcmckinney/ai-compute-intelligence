@@ -12,6 +12,7 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from ipaddress import ip_address, ip_network
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
 
@@ -47,6 +48,8 @@ from aci.pricing.catalog import PricingUsage
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable
 
+    from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
     from aci.interventions.registry import InterventionRecord
 
 logger = structlog.get_logger()
@@ -71,6 +74,92 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.add_middleware(GZipMiddleware, minimum_size=500)
+
+
+class _RequestBodyTooLargeError(Exception):
+    pass
+
+
+class RequestBodyLimitMiddleware:
+    """Reject oversized ingestion payloads before FastAPI parses the request body."""
+
+    _LIMITED_PATHS = {"/v1/events/ingest", "/v1/events/ingest/batch"}
+
+    def __init__(self, app: ASGIApp, default_max_body_bytes: int = 1_048_576) -> None:
+        self.app = app
+        self.default_max_body_bytes = default_max_body_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        method = scope.get("method", "").upper()
+        path = scope.get("path", "")
+        if method != "POST" or path not in self._LIMITED_PATHS:
+            await self.app(scope, receive, send)
+            return
+
+        max_body_bytes = self._resolve_limit(scope)
+        content_length = self._content_length(scope)
+        if content_length is not None and content_length > max_body_bytes:
+            await self._send_too_large(send, max_body_bytes)
+            return
+
+        total_body_bytes = 0
+
+        async def limited_receive() -> Message:
+            nonlocal total_body_bytes
+            message = await receive()
+            if message["type"] == "http.request":
+                total_body_bytes += len(message.get("body", b""))
+                if total_body_bytes > max_body_bytes:
+                    raise _RequestBodyTooLargeError
+            return message
+
+        try:
+            await self.app(scope, limited_receive, send)
+        except _RequestBodyTooLargeError:
+            await self._send_too_large(send, max_body_bytes)
+
+    def _resolve_limit(self, scope: Scope) -> int:
+        app_instance = scope.get("app")
+        if isinstance(app_instance, FastAPI):
+            return get_state(app_instance).config.api_max_request_bytes
+        return self.default_max_body_bytes
+
+    @staticmethod
+    def _content_length(scope: Scope) -> int | None:
+        for key, value in scope.get("headers", []):
+            if key.lower() == b"content-length":
+                try:
+                    return int(value.decode("latin-1"))
+                except ValueError:
+                    return None
+        return None
+
+    @staticmethod
+    async def _send_too_large(send: Send, max_body_bytes: int) -> None:
+        body = (
+            f'{{"detail":"request body exceeds configured max {max_body_bytes} bytes"}}'
+        ).encode()
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 413,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode("ascii")),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": body, "more_body": False})
+
+
+app.add_middleware(
+    RequestBodyLimitMiddleware,
+    default_max_body_bytes=int(os.getenv("ACI_API_MAX_REQUEST_BYTES", "1048576")),
+)
 
 
 def get_state(app_instance: FastAPI | None = None) -> AppState:
@@ -583,6 +672,7 @@ class NotificationDeliveryResponse(BaseModel):
 
 def _ingest_rate_limit_key(request: Request) -> str:
     """Derive a stable per-caller key for ingestion throttling."""
+    app_state = get_state(request.app)
     claims = getattr(request.state, "auth_claims", None)
     if isinstance(claims, dict):
         subject = str(claims.get("sub", "")).strip()
@@ -590,13 +680,36 @@ def _ingest_rate_limit_key(request: Request) -> str:
             return f"sub:{subject}"
 
     forwarded_for = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-    if forwarded_for:
+    if forwarded_for and _request_came_from_trusted_proxy(request, app_state):
         return f"ip:{forwarded_for}"
 
     if request.client and request.client.host:
         return f"ip:{request.client.host}"
 
     return "anonymous"
+
+
+def _request_came_from_trusted_proxy(request: Request, app_state: AppState) -> bool:
+    trusted_entries = [
+        item.strip()
+        for item in app_state.config.api_trusted_proxy_cidrs.split(",")
+        if item.strip()
+    ]
+    if not trusted_entries or request.client is None:
+        return False
+
+    try:
+        client_ip = ip_address(request.client.host)
+    except ValueError:
+        return False
+
+    for entry in trusted_entries:
+        try:
+            if client_ip in ip_network(entry, strict=False):
+                return True
+        except ValueError:
+            logger.warning("proxy_config.invalid_cidr", cidr=entry)
+    return False
 
 
 def _extract_aci_headers(request: Request) -> dict[str, str]:

@@ -14,6 +14,7 @@ from aci.core.processor import AttributionProcessor
 from aci.graph.store import GraphStore, InMemoryGraphStore, Neo4jGraphStore, build_graph_store
 from aci.hre.engine import HeuristicReconciliationEngine
 from aci.index.materializer import AttributionIndexStore, IndexMaterializer
+from aci.interceptor.gateway import FailOpenInterceptor
 from aci.interceptor.shadow_warming import ShadowWarmer
 from aci.models.attribution import (
     AttributionIndexEntry,
@@ -171,6 +172,7 @@ def test_platform_config_requires_rediss_for_production_durable_backends() -> No
     with pytest.raises(ValueError, match="redis_url must use rediss://"):
         PlatformConfig(
             environment="production",
+            runtime_role="processor",
             graph_backend="neo4j",
             neo4j_password="strong-secret",
             index_backend="redis",
@@ -185,6 +187,7 @@ def test_platform_config_requires_rediss_for_production_durable_backends() -> No
 
     config = PlatformConfig(
         environment="production",
+        runtime_role="processor",
         graph_backend="neo4j",
         neo4j_password="strong-secret",
         index_backend="redis",
@@ -231,6 +234,7 @@ async def test_shadow_warmer_bounds_tracked_refresh_state() -> None:
 def test_platform_config_model_dump_redacts_secret_values() -> None:
     config = PlatformConfig(
         environment="production",
+        runtime_role="processor",
         graph_backend="neo4j",
         neo4j_password="strong-secret",
         auth=AuthConfig(
@@ -269,6 +273,7 @@ def test_graph_store_factory_selects_configured_backend() -> None:
     memory_config = PlatformConfig(environment="demo", graph_backend="memory")
     neo4j_config = PlatformConfig(
         environment="production",
+        runtime_role="processor",
         graph_backend="neo4j",
         neo4j_password="strong-secret",
         auth=AuthConfig(
@@ -304,8 +309,10 @@ def test_gateway_runtime_skips_processor_only_components(monkeypatch: pytest.Mon
     monkeypatch.setenv("ACI_RUNTIME_ROLE", "gateway")
     monkeypatch.setenv("ACI_ENVIRONMENT", "development")
     monkeypatch.setenv("ACI_GRAPH_BACKEND", "memory")
-    monkeypatch.setenv("ACI_EVENT_BUS_BACKEND", "memory")
+    monkeypatch.setenv("ACI_EVENT_BUS_BACKEND", "kafka")
     monkeypatch.setenv("ACI_INDEX_BACKEND", "memory")
+    monkeypatch.setenv("ACI_REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setenv("ACI_INTERCEPTOR_SHADOW_EVENTS_ENABLED", "true")
 
     app_state = AppState()
 
@@ -314,7 +321,10 @@ def test_gateway_runtime_skips_processor_only_components(monkeypatch: pytest.Mon
     assert app_state.graph is None
     assert app_state.hre is None
     assert app_state.calibration is None
-    assert app_state.event_bus.stats["backend"] == "disabled"
+    assert app_state.event_bus.stats["backend"] == "kafka"
+    assert app_state.event_bus.stats["consume_messages"] is False
+    assert isinstance(app_state.interceptor, FailOpenInterceptor)
+    assert app_state.interceptor._event_bus is app_state.event_bus
 
 
 @pytest.mark.asyncio
@@ -351,6 +361,91 @@ async def test_ingest_rate_limiter_cleans_stale_buckets() -> None:
     assert await limiter.allow("caller-b") is True
     assert "caller-a" not in limiter._events
     assert "caller-b" in limiter._events
+
+
+@pytest.mark.asyncio
+async def test_redis_token_bucket_rate_limiter_blocks_after_capacity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from aci.api.runtime import RedisTokenBucketRateLimiter
+
+    class _FakeRedis:
+        def __init__(self) -> None:
+            self.state: dict[str, tuple[float, float]] = {}
+
+        async def eval(
+            self,
+            _script: str,
+            _numkeys: int,
+            *keys_and_args: str,
+        ) -> list[int | float | str]:
+            (
+                redis_key,
+                capacity,
+                refill_rate,
+                now,
+                requested,
+                _ttl,
+            ) = keys_and_args
+            cap = float(capacity)
+            refill = float(refill_rate)
+            current = float(now)
+            ask = float(requested)
+            tokens, updated_at = self.state.get(redis_key, (cap, current))
+            elapsed = max(0.0, current - updated_at)
+            tokens = min(cap, tokens + (elapsed * refill))
+            allowed = 0
+            if tokens >= ask:
+                tokens -= ask
+                allowed = 1
+            self.state[redis_key] = (tokens, current)
+            return [allowed, tokens]
+
+        async def aclose(self) -> None:
+            return None
+
+    fake_redis = _FakeRedis()
+    limiter = RedisTokenBucketRateLimiter(
+        redis_url="redis://localhost:6379/0",
+        limit=1,
+        redis_client=fake_redis,
+    )
+
+    assert await limiter.allow("caller-a") is True
+    assert await limiter.allow("caller-a") is False
+    await limiter.close()
+
+
+def test_platform_config_rejects_wildcard_cors_with_credentials() -> None:
+    with pytest.raises(
+        ValueError,
+        match="api_cors_allow_credentials cannot be true",
+    ):
+        PlatformConfig(
+            api_cors_allowed_origins="*",
+            api_cors_allow_credentials=True,
+        )
+
+
+def test_platform_config_requires_kafka_for_gateway_shadow_events_in_production() -> None:
+    with pytest.raises(
+        ValueError,
+        match="event_bus_backend must be 'kafka' when shadow_events_enabled is true",
+    ):
+        PlatformConfig(
+            environment="production",
+            runtime_role="gateway",
+            graph_backend="memory",
+            event_bus_backend="memory",
+            neo4j_password="strong-secret",
+            redis_url="rediss://cache.internal:6379/0",
+            auth=AuthConfig(
+                enabled=True,
+                allow_dev_bypass=False,
+                jwt_algorithm="HS256",
+                jwt_hs256_secret="really-strong-secret",
+            ),
+        )
 
 
 def test_materializer_persists_input_token_budget_constraints() -> None:
