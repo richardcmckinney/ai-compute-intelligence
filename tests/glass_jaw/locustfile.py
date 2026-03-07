@@ -18,21 +18,22 @@ from __future__ import annotations
 import random
 import uuid
 
-from locust import HttpUser, between, task
+from locust import HttpUser, constant_throughput, task
 
 
 class InterceptorUser(HttpUser):
     """Simulates inference requests hitting the interceptor endpoint."""
 
-    wait_time = between(0.001, 0.01)  # type: ignore[no-untyped-call]
+    # 500 users * 20 tasks/sec ~= 10K requests/sec target throughput.
+    wait_time = constant_throughput(20)  # type: ignore[no-untyped-call]
 
-    MODELS = ["gpt-4o", "gpt-4o-mini", "claude-3-haiku", "claude-3.5-sonnet"]
+    MODELS = ["gpt-4o", "gpt-4o-mini", "gemini-1.5-flash", "gemini-2.0-flash"]
     SERVICES = [f"service-{i}" for i in range(1000)]
 
     @task(10)
     def intercept_known_service(self) -> None:
         """Request for a service that exists in the index (cache hit path)."""
-        self.client.post(
+        with self.client.post(
             "/v1/intercept",
             json={
                 "request_id": str(uuid.uuid4()),
@@ -42,12 +43,19 @@ class InterceptorUser(HttpUser):
                 "estimated_cost_usd": random.uniform(0.001, 0.05),
             },
             name="/v1/intercept [hit]",
-        )
+            catch_response=True,
+        ) as response:
+            if response.status_code != 200:
+                response.failure(f"unexpected status {response.status_code}")
+                return
+            payload = response.json()
+            if "outcome" not in payload:
+                response.failure("missing interception outcome")
 
     @task(3)
     def intercept_unknown_service(self) -> None:
         """Request for an unknown service (cache miss / fail-open path)."""
-        self.client.post(
+        with self.client.post(
             "/v1/intercept",
             json={
                 "request_id": str(uuid.uuid4()),
@@ -57,17 +65,31 @@ class InterceptorUser(HttpUser):
                 "estimated_cost_usd": random.uniform(0.001, 0.05),
             },
             name="/v1/intercept [miss]",
-        )
+            catch_response=True,
+        ) as response:
+            if response.status_code != 200:
+                response.failure(f"unexpected status {response.status_code}")
+                return
+            payload = response.json()
+            valid_outcomes = {"fail_open", "enriched", "soft_stopped", "passthrough"}
+            if payload.get("outcome") not in valid_outcomes:
+                response.failure(f"unexpected interceptor outcome {payload.get('outcome')}")
 
     @task(1)
     def health_check(self) -> None:
         """Periodic health check."""
-        self.client.get("/health")
+        with self.client.get("/health", catch_response=True) as response:
+            if response.status_code != 200:
+                response.failure(f"unexpected status {response.status_code}")
+                return
+            payload = response.json()
+            if payload.get("status") not in {"healthy", "degraded"}:
+                response.failure(f"unexpected health payload {payload}")
 
     @task(1)
     def compute_trac(self) -> None:
         """TRAC computation endpoint."""
-        self.client.post(
+        with self.client.post(
             "/v1/trac",
             json={
                 "workload_id": random.choice(self.SERVICES),
@@ -76,4 +98,11 @@ class InterceptorUser(HttpUser):
                 "attribution_confidence": random.uniform(0.3, 0.95),
             },
             name="/v1/trac",
-        )
+            catch_response=True,
+        ) as response:
+            if response.status_code != 200:
+                response.failure(f"unexpected status {response.status_code}")
+                return
+            payload = response.json()
+            if "trac_usd" not in payload:
+                response.failure("missing trac_usd in response")

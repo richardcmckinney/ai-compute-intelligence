@@ -54,6 +54,8 @@ class EventType(StrEnum):
     # to trigger graph resolution for unknown/stale workloads.
     SHADOW_INTERCEPT_MISS = "interceptor.shadow.miss"
     SHADOW_INTERCEPT_TIMEOUT = "interceptor.shadow.timeout"
+    POLICY_EVALUATED = "interceptor.policy.evaluated"
+    INTERVENTION_APPLIED = "interceptor.intervention.applied"
 
 
 class DomainEvent(BaseModel):

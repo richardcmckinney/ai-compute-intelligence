@@ -35,7 +35,7 @@ class EquivalenceClass:
     An admin-defined model equivalence class (Mode 1).
 
     Groups models that are approved for a specific use case.
-    Example: "Customer Support Chat" -> [gpt-4o, gpt-4o-mini, claude-3-haiku].
+    Example: "Customer Support Chat" -> [gpt-4o, gpt-4o-mini, gemini-1.5-flash].
     """
 
     def __init__(

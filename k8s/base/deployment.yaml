@@ -15,15 +15,22 @@ metadata:
   namespace: aci-platform
 data:
   ACI_ENVIRONMENT: "production"
+  ACI_GRAPH_BACKEND: "neo4j"
   ACI_INDEX_BACKEND: "redis"
   ACI_INDEX_REDIS_PREFIX: "aci:index"
+  ACI_INDEX_REDIS_TTL_S: "1800"
   ACI_KAFKA_BOOTSTRAP: "kafka:9092"
-  ACI_REDIS_URL: "redis://redis:6379/0"
+  ACI_REDIS_URL: "rediss://replace-with-managed-redis:6379/0"
   ACI_EVENT_BUS_TOPIC: "aci.events"
   ACI_EVENT_BUS_DLQ_TOPIC: "aci.events.dlq"
   ACI_EVENT_BUS_CONSUMER_GROUP: "aci-processor"
   ACI_INTERCEPTOR_TIMEOUT_MS: "20"
   ACI_INTERCEPTOR_TOTAL_BUDGET_MS: "50"
+  ACI_INTERCEPTOR_POLICY_TIMEOUT_MS: "15"
+  ACI_INTERCEPTOR_ACTIVE_LITE_MIN_CONFIDENCE: "0.90"
+  ACI_INTERCEPTOR_ACTIVE_LITE_GATE_MIN_CONFIDENCE: "0.95"
+  ACI_INTERCEPTOR_MODE: "advisory"
+  ACI_UVICORN_WORKERS: "1"
   ACI_INTERCEPTOR_CIRCUIT_STATE_BACKEND: "redis"
   ACI_INTERCEPTOR_CIRCUIT_STATE_REDIS_KEY: "aci:circuit:interceptor"
   ACI_INTERCEPTOR_MAX_ENRICHMENT_HEADER_BYTES: "4096"
@@ -51,7 +58,19 @@ metadata:
   namespace: aci-platform
   annotations:
     # For AWS: IAM role for read-only billing + CloudTrail access.
-    eks.amazonaws.com/role-arn: ""
+    eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/aci-platform-runtime"
+---
+# Secret template: replace all placeholder values before deployment.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aci-secrets
+  namespace: aci-platform
+type: Opaque
+stringData:
+  ACI_AUTH_JWT_HS256_SECRET: "replace-with-strong-secret"
+  ACI_NEO4J_PASSWORD: "replace-with-neo4j-password"
+  ACI_REDIS_URL: "rediss://replace-with-managed-redis:6379/0"
 ---
 # Deployment: gateway role (decision-time interceptor).
 # This tier is intentionally isolated: it only needs Redis index access.
@@ -82,7 +101,7 @@ spec:
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8000"
-        prometheus.io/path: "/metrics"
+        prometheus.io/path: "/metrics/prometheus"
     spec:
       serviceAccountName: aci-platform
       securityContext:

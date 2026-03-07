@@ -139,6 +139,31 @@ class _ShadowInterceptPayload(_StrictBaseModel):
     workload_id: str
     elapsed_ms: float
     interceptor_mode: str
+    tenant_id: str = ""
+
+
+class _InterventionAppliedPayload(_StrictBaseModel):
+    request_id: str
+    workload_id: str
+    action_type: str
+    original_model: str
+    new_model: str = ""
+    attribution_confidence: float = 0.0
+    estimated_cost_usd: float = 0.0
+    environment: str = ""
+    elapsed_ms: float = 0.0
+    tenant_id: str = ""
+
+
+class _PolicyEvaluatedPayload(_StrictBaseModel):
+    request_id: str
+    workload_id: str
+    violation_count: int = 0
+    violated_policy_ids: list[str] = Field(default_factory=list)
+    mode: str
+    fail_open: bool = False
+    elapsed_ms: float = 0.0
+    environment: str = ""
 
 
 class _AttributionCorrectionPayload(_StrictBaseModel):
@@ -204,6 +229,8 @@ EVENT_PAYLOAD_SCHEMAS: dict[EventType, type[BaseModel]] = {
     EventType.TEAM_MEMBERSHIP: _TeamMembershipPayload,
     EventType.SHADOW_INTERCEPT_MISS: _ShadowInterceptPayload,
     EventType.SHADOW_INTERCEPT_TIMEOUT: _ShadowInterceptPayload,
+    EventType.POLICY_EVALUATED: _PolicyEvaluatedPayload,
+    EventType.INTERVENTION_APPLIED: _InterventionAppliedPayload,
     EventType.ATTRIBUTION_CORRECTION: _AttributionCorrectionPayload,
     EventType.CHARGEBACK_DECISION: _ChargebackDecisionPayload,
     EventType.FINOPS_REVIEW: _FinopsReviewPayload,

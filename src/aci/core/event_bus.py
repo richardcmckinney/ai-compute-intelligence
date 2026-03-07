@@ -427,25 +427,32 @@ class KafkaEventBus:
         if not handlers:
             return
 
-        await asyncio.gather(
-            *(self._dispatch_handler(topic, handler, event) for handler in handlers)
+        results = await asyncio.gather(
+            *(self._dispatch_handler(handler, event) for handler in handlers),
+            return_exceptions=True,
         )
+        errors = [result for result in results if isinstance(result, Exception)]
+        if not errors:
+            return
+
+        for exc in errors:
+            self._dispatch_errors += 1
+            logger.error("event_bus.kafka_handler_error", topic=topic, error=str(exc))
+
+        first = errors[0]
+        if len(errors) == 1:
+            raise first
+        raise RuntimeError(f"{len(errors)} handlers failed for topic '{topic}'") from first
 
     async def _dispatch_handler(
         self,
-        topic: str,
         handler: EventHandler,
         event: DomainEvent,
     ) -> None:
         async with self._dispatch_semaphore:
-            try:
-                maybe_result = handler(event)
-                if inspect.isawaitable(maybe_result):
-                    await maybe_result
-            except Exception as exc:
-                self._dispatch_errors += 1
-                logger.error("event_bus.kafka_handler_error", topic=topic, error=str(exc))
-                raise
+            maybe_result = handler(event)
+            if inspect.isawaitable(maybe_result):
+                await maybe_result
 
     async def _publish_dlq(
         self,

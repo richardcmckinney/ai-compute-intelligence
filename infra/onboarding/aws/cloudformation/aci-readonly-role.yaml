@@ -1,0 +1,114 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  ACI onboarding role (read-only) for telemetry, billing, and deployment metadata.
+
+Parameters:
+  AciPrincipalArn:
+    Type: String
+    Description: IAM principal ARN allowed to assume this role (ACI control plane or broker account)
+  ExternalId:
+    Type: String
+    Description: External ID shared out-of-band for role assumption
+    MinLength: 12
+  RoleName:
+    Type: String
+    Default: aci-readonly-integration
+  CurBucketName:
+    Type: String
+    Default: ""
+    Description: Optional CUR bucket name for billing export reads
+  CurPrefix:
+    Type: String
+    Default: ""
+    Description: Optional CUR prefix path (for example, org-a/cur/)
+
+Conditions:
+  EnableCurAccess: !Not [!Equals [!Ref CurBucketName, ""]]
+
+Resources:
+  AciReadonlyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref RoleName
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Ref AciPrincipalArn
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      Policies:
+        - PolicyName: aci-readonly-core
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: CostExplorerRead
+                Effect: Allow
+                Action:
+                  - ce:GetCostAndUsage
+                  - ce:GetCostAndUsageWithResources
+                  - ce:GetDimensionValues
+                  - ce:GetTags
+                Resource: "*"
+              - Sid: CloudWatchRead
+                Effect: Allow
+                Action:
+                  - cloudwatch:GetMetricData
+                  - cloudwatch:GetMetricStatistics
+                  - cloudwatch:ListMetrics
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                  - logs:GetLogEvents
+                  - logs:FilterLogEvents
+                  - logs:StartQuery
+                  - logs:GetQueryResults
+                Resource: "*"
+              - Sid: CloudTrailRead
+                Effect: Allow
+                Action:
+                  - cloudtrail:LookupEvents
+                  - cloudtrail:GetTrailStatus
+                  - cloudtrail:DescribeTrails
+                Resource: "*"
+              - Sid: BedrockRead
+                Effect: Allow
+                Action:
+                  - bedrock:ListFoundationModels
+                  - bedrock:GetModelInvocationLoggingConfiguration
+                Resource: "*"
+              - Sid: ResourceInventoryRead
+                Effect: Allow
+                Action:
+                  - ec2:DescribeRegions
+                  - ec2:DescribeTags
+                  - resourcegroupstaggingapi:GetResources
+                  - sts:GetCallerIdentity
+                Resource: "*"
+        - !If
+          - EnableCurAccess
+          - PolicyName: aci-readonly-cur
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Sid: CurBucketList
+                  Effect: Allow
+                  Action:
+                    - s3:ListBucket
+                  Resource:
+                    - !Sub "arn:aws:s3:::${CurBucketName}"
+                - Sid: CurObjectRead
+                  Effect: Allow
+                  Action:
+                    - s3:GetObject
+                  Resource:
+                    - !Sub "arn:aws:s3:::${CurBucketName}/${CurPrefix}*"
+          - !Ref AWS::NoValue
+
+Outputs:
+  RoleArn:
+    Description: ARN of the ACI read-only integration role
+    Value: !GetAtt AciReadonlyRole.Arn

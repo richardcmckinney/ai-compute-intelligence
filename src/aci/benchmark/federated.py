@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import math
 import secrets
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -65,19 +66,21 @@ def _discrete_laplace(scale: float) -> float:
     if scale <= 0.0:
         return 0.0
 
-    # q = exp(-1/b) is the geometric distribution parameter.
-    q = math.exp(-1.0 / scale)
+    # For Geom(1-q), inverse CDF sampling can be done from log(q) directly:
+    # k = floor(log(u) / log(q)).
+    # Using log(q) avoids underflow for very small scales.
+    log_q = -1.0 / scale
 
-    def _secure_geometric(q_param: float) -> int:
-        if q_param >= 1.0 or q_param <= 0.0:
+    def _secure_geometric(log_q_param: float) -> int:
+        if not math.isfinite(log_q_param) or log_q_param >= 0.0:
             return 0
         # CSPRNG uniform [0, 1).
         u = secrets.SystemRandom().random()
         if u == 0.0:
             u = 2.0**-53  # Smallest positive float64.
-        return int(math.floor(math.log(u) / math.log(q_param)))
+        return int(math.floor(math.log(u) / log_q_param))
 
-    return float(_secure_geometric(q) - _secure_geometric(q))
+    return float(_secure_geometric(log_q) - _secure_geometric(log_q))
 
 
 @dataclass
@@ -143,6 +146,7 @@ class FederatedBenchmarkProtocol:
         self.cohorts: dict[str, list[CohortMembership]] = {}
         self.metrics: dict[str, list[BenchmarkMetric]] = {}
         self.budget_consumed: dict[str, float] = {}  # org_id -> epsilon consumed this quarter
+        self._budget_lock = threading.RLock()
         self.rng = np.random.default_rng()
         self._add_noise: NoiseFn
 
@@ -250,35 +254,42 @@ class FederatedBenchmarkProtocol:
                 suppression_reason="No metric submissions for this period",
             )
 
-        # Check privacy budgets.
-        epsilon = self.config.epsilon_per_release
-        for member in members:
-            consumed = self.budget_consumed.get(member.org_id, 0.0)
-            if consumed + epsilon > self.config.epsilon_total_quarterly:
-                raise PrivacyBudgetExhaustedError(
-                    f"Org {member.org_id}: budget {consumed + epsilon:.1f} "
-                    f"exceeds quarterly limit {self.config.epsilon_total_quarterly}"
+        # Account for both released statistics (mean + median) from a single
+        # release budget by splitting epsilon across the two mechanisms.
+        epsilon_total = self.config.epsilon_per_release
+        epsilon_per_stat = epsilon_total / 2.0
+        if epsilon_per_stat <= 0:
+            raise ValueError("epsilon_per_release must be greater than 0")
+
+        with self._budget_lock:
+            # Check privacy budgets atomically with updates.
+            for member in members:
+                consumed = self.budget_consumed.get(member.org_id, 0.0)
+                if consumed + epsilon_total > self.config.epsilon_total_quarterly:
+                    raise PrivacyBudgetExhaustedError(
+                        f"Org {member.org_id}: budget {consumed + epsilon_total:.1f} "
+                        f"exceeds quarterly limit {self.config.epsilon_total_quarterly}"
+                    )
+
+            # Compute per-statistic sensitivity:
+            # mean sensitivity scales with 1/n, median remains bounded by clipping range.
+            bound = self.sensitivity_bounds.get(metric_name, 1000.0)
+            mean_sensitivity = bound / len(values)
+            median_sensitivity = bound
+
+            # Add calibrated noise: scale = sensitivity / epsilon.
+            mean_noise_scale = mean_sensitivity / epsilon_per_stat
+            median_noise_scale = median_sensitivity / epsilon_per_stat
+            raw_mean = float(np.mean(values))
+            raw_median = float(np.median(values))
+            noisy_mean = raw_mean + self._add_noise(mean_noise_scale)
+            noisy_median = raw_median + self._add_noise(median_noise_scale)
+
+            # Update privacy budgets.
+            for member in members:
+                self.budget_consumed[member.org_id] = (
+                    self.budget_consumed.get(member.org_id, 0.0) + epsilon_total
                 )
-
-        # Compute per-statistic sensitivity:
-        # mean sensitivity scales with 1/n, median remains bounded by clipping range.
-        bound = self.sensitivity_bounds.get(metric_name, 1000.0)
-        mean_sensitivity = bound / len(values)
-        median_sensitivity = bound
-
-        # Add calibrated noise: scale = sensitivity / epsilon.
-        mean_noise_scale = mean_sensitivity / epsilon
-        median_noise_scale = median_sensitivity / epsilon
-        raw_mean = float(np.mean(values))
-        raw_median = float(np.median(values))
-        noisy_mean = raw_mean + self._add_noise(mean_noise_scale)
-        noisy_median = raw_median + self._add_noise(median_noise_scale)
-
-        # Update privacy budgets.
-        for member in members:
-            self.budget_consumed[member.org_id] = (
-                self.budget_consumed.get(member.org_id, 0.0) + epsilon
-            )
 
         return CohortBenchmark(
             cohort_id=cohort_id,
@@ -286,7 +297,7 @@ class FederatedBenchmarkProtocol:
             noisy_mean=round(noisy_mean, 6),
             noisy_median=round(noisy_median, 6),
             member_count=len(members),
-            epsilon_consumed=epsilon,
+            epsilon_consumed=epsilon_total,
             period=period,
         )
 

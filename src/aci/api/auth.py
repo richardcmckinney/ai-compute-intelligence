@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Any
 import jwt
 from jwt import InvalidTokenError
 
+from aci.config import _secret_value
+
 if TYPE_CHECKING:
     from aci.config import AuthConfig, PlatformConfig
 
@@ -27,9 +29,14 @@ def is_auth_required(path: str) -> bool:
 
 
 def can_bypass_auth(config: PlatformConfig) -> bool:
-    return config.environment.lower() in {"development", "dev", "test", "testing", "local"} and (
-        config.auth.allow_dev_bypass
-    )
+    return config.environment.lower() in {
+        "development",
+        "dev",
+        "test",
+        "testing",
+        "local",
+        "demo",
+    } and config.auth.allow_dev_bypass
 
 
 def decode_and_validate_token(
@@ -69,8 +76,8 @@ def decode_and_validate_token(
 def _jwt_key(config: AuthConfig) -> str:
     algorithm = config.jwt_algorithm.upper()
     if algorithm.startswith("HS"):
-        return config.jwt_hs256_secret
-    return config.jwt_public_key_pem
+        return _secret_value(config.jwt_hs256_secret)
+    return _secret_value(config.jwt_public_key_pem)
 
 
 def _normalize_scopes(raw_scope: object | None) -> set[str]:

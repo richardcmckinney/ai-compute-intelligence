@@ -41,6 +41,7 @@ class AttributionIndexStore:
         max_entries: int = 250_000,
         redis_url: str | None = None,
         redis_prefix: str = "aci:index",
+        redis_ttl_seconds: int = 1800,
     ) -> None:
         # Primary index: workload_id -> AttributionIndexEntry.
         self._index: OrderedDict[str, AttributionIndexEntry] = OrderedDict()
@@ -63,7 +64,39 @@ class AttributionIndexStore:
         self._lock = RLock()
 
         self._redis_prefix = redis_prefix
+        self._redis_ttl_seconds = redis_ttl_seconds
+        self._schema_version = 1
         self._redis: Redis | None = None
+        self._redis_upsert_script = """
+        local key = KEYS[1]
+        local payload = ARGV[1]
+        local incoming_version = tonumber(ARGV[2])
+        local schema_v = ARGV[3]
+        local ttl_ms = tonumber(ARGV[4])
+        local current_version = tonumber(redis.call('HGET', key, 'version') or '0')
+
+        if incoming_version < current_version then
+          if ttl_ms > 0 then
+            redis.call('PEXPIRE', key, ttl_ms)
+          end
+          return current_version
+        end
+
+        redis.call(
+          'HSET',
+          key,
+          'payload',
+          payload,
+          'version',
+          incoming_version,
+          'schema_v',
+          schema_v
+        )
+        if ttl_ms > 0 then
+          redis.call('PEXPIRE', key, ttl_ms)
+        end
+        return incoming_version
+        """
         if redis_url:
             try:
                 self._redis = Redis.from_url(
@@ -138,6 +171,7 @@ class AttributionIndexStore:
                 "durable_misses": self._durable_misses,
                 "durable_writes": self._durable_writes,
                 "durable_errors": self._durable_errors,
+                "durable_ttl_seconds": self._redis_ttl_seconds if self._redis is not None else None,
             }
 
     def durable_backend_healthy(self) -> bool:
@@ -206,6 +240,16 @@ class AttributionIndexStore:
             self._index.clear()
             self._versions.clear()
 
+        if self._redis is not None:
+            pattern = f"{self._redis_prefix}:*"
+            try:
+                keys = list(self._redis.scan_iter(match=pattern, count=500))
+                if keys:
+                    self._redis.delete(*keys)
+            except RedisError:
+                with self._lock:
+                    self._durable_errors += 1
+
     def _insert_local_locked(self, entry: AttributionIndexEntry) -> None:
         self._index[entry.workload_id] = entry
         self._index.move_to_end(entry.workload_id)
@@ -223,12 +267,23 @@ class AttributionIndexStore:
         if self._redis is None:
             return None
         try:
-            raw = self._redis.get(self._redis_key(workload_id))
-            if raw is None:
-                with self._lock:
-                    self._durable_misses += 1
-                return None
-            return AttributionIndexEntry.model_validate_json(cast("str", raw))
+            key = self._redis_key(workload_id)
+            hash_values = cast(
+                "list[object] | None",
+                self._redis.hmget(key, ["payload", "version"]),
+            )
+            raw_payload = hash_values[0] if hash_values else None
+
+            # Backward-compatible fallback for legacy string values.
+            if raw_payload is None:
+                legacy = self._redis.get(key)
+                if legacy is None:
+                    with self._lock:
+                        self._durable_misses += 1
+                    return None
+                return AttributionIndexEntry.model_validate_json(cast("str", legacy))
+
+            return AttributionIndexEntry.model_validate_json(cast("str", raw_payload))
         except (RedisError, ValueError):
             with self._lock:
                 self._durable_errors += 1
@@ -239,10 +294,42 @@ class AttributionIndexStore:
             return
         try:
             payload = json.dumps(entry.model_dump(mode="json"))
-            self._redis.set(self._redis_key(entry.workload_id), payload)
+            ttl_ms = max(0, int(self._redis_ttl_seconds * 1000))
+            self._redis.eval(
+                self._redis_upsert_script,
+                1,
+                self._redis_key(entry.workload_id),
+                payload,
+                entry.version,
+                self._schema_version,
+                ttl_ms,
+            )
             with self._lock:
                 self._durable_writes += 1
-        except RedisError:
+        except (RedisError, AttributeError, TypeError):
+            # Conservative fallback path if Lua is unavailable.
+            try:
+                key = self._redis_key(entry.workload_id)
+                if hasattr(self._redis, "hset"):
+                    self._redis.hset(
+                        key,
+                        mapping={
+                            "payload": payload,
+                            "version": entry.version,
+                            "schema_v": self._schema_version,
+                        },
+                    )
+                    if self._redis_ttl_seconds > 0:
+                        self._redis.expire(key, self._redis_ttl_seconds)
+                elif self._redis_ttl_seconds > 0:
+                    self._redis.set(key, payload, ex=self._redis_ttl_seconds)
+                else:
+                    self._redis.set(key, payload)
+                with self._lock:
+                    self._durable_writes += 1
+                return
+            except RedisError:
+                pass
             with self._lock:
                 self._durable_errors += 1
 
@@ -362,6 +449,10 @@ class IndexMaterializer:
             updates["budget_limit_usd"] = policies["budget_limit_usd"]
         if "token_budget_output" in policies:
             updates["token_budget_output"] = policies["token_budget_output"]
+        if "token_budget_input" in policies:
+            updates["token_budget_input"] = policies["token_budget_input"]
+        if "cost_ceiling_per_request_usd" in policies:
+            updates["cost_ceiling_per_request_usd"] = policies["cost_ceiling_per_request_usd"]
         if "equivalence_class_id" in policies:
             updates["equivalence_class_id"] = policies["equivalence_class_id"]
             updates["approved_alternatives"] = policies.get("approved_alternatives", [])

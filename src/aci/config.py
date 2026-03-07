@@ -8,7 +8,7 @@ from environment variables or a configuration service.
 
 from __future__ import annotations
 
-from pydantic import Field, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -23,6 +23,12 @@ class InterceptorConfig(BaseSettings):
 
     # Total interception budget including routing decision.
     total_budget_ms: int = Field(default=50, description="Total interception overhead budget (ms)")
+
+    # Policy evaluation budget (subset of enrichment timeout budget).
+    policy_timeout_ms: int = Field(
+        default=15,
+        description="Hard timeout for in-process policy evaluation (ms)",
+    )
 
     # Circuit breaker: consecutive failures before opening.
     circuit_breaker_threshold: int = Field(default=5, description="Failures before circuit opens")
@@ -61,6 +67,32 @@ class InterceptorConfig(BaseSettings):
         default=512,
         description="Max length of each generated header value",
     )
+    active_lite_min_confidence: float = Field(
+        default=0.90,
+        description="Minimum attribution confidence required for Active-Lite shape actions",
+    )
+    active_lite_gate_min_confidence: float = Field(
+        default=0.95,
+        description="Minimum attribution confidence required for Active-Lite gate actions",
+    )
+
+    @model_validator(mode="after")
+    def _validate_active_lite_thresholds(self) -> InterceptorConfig:
+        if self.policy_timeout_ms <= 0:
+            raise ValueError("policy_timeout_ms must be greater than 0")
+        if self.timeout_ms > 0 and self.policy_timeout_ms > self.timeout_ms:
+            raise ValueError("policy_timeout_ms must be less than or equal to timeout_ms")
+
+        if not (0.0 <= self.active_lite_min_confidence <= 1.0):
+            raise ValueError("active_lite_min_confidence must be between 0 and 1")
+        if not (0.0 <= self.active_lite_gate_min_confidence <= 1.0):
+            raise ValueError("active_lite_gate_min_confidence must be between 0 and 1")
+        if self.active_lite_gate_min_confidence < self.active_lite_min_confidence:
+            raise ValueError(
+                "active_lite_gate_min_confidence must be greater than or equal to "
+                "active_lite_min_confidence"
+            )
+        return self
 
 
 class ConfidenceConfig(BaseSettings):
@@ -204,12 +236,12 @@ class AuthConfig(BaseSettings):
     jwt_algorithm: str = Field(default="HS256", description="JWT signing algorithm")
     jwt_issuer: str = Field(default="aci-control-plane", description="Expected JWT issuer")
     jwt_audience: str = Field(default="aci-api", description="Expected JWT audience")
-    jwt_hs256_secret: str = Field(
-        default="dev-only-secret",
+    jwt_hs256_secret: SecretStr = Field(
+        default=SecretStr("dev-only-secret"),
         description="Shared HMAC secret for HS256",
     )
-    jwt_public_key_pem: str = Field(
-        default="",
+    jwt_public_key_pem: SecretStr = Field(
+        default=SecretStr(""),
         description="PEM-encoded public key for asymmetric JWT validation",
     )
     required_scope: str = Field(default="aci.api", description="Required service scope")
@@ -228,6 +260,10 @@ class PlatformConfig(BaseSettings):
     runtime_role: str = Field(
         default="all",
         description="Runtime role (all|gateway|processor)",
+    )
+    interceptor_mode: str = Field(
+        default="advisory",
+        description="Interceptor deployment mode (passive|advisory|active)",
     )
     api_ingest_rate_limit_per_minute: int = Field(
         default=600,
@@ -264,9 +300,17 @@ class PlatformConfig(BaseSettings):
         default="memory",
         description="Attribution index backend (memory|redis)",
     )
+    graph_backend: str = Field(
+        default="memory",
+        description="Authoritative graph backend (memory|neo4j)",
+    )
     index_redis_prefix: str = Field(
         default="aci:index",
         description="Redis key prefix for durable index entries",
+    )
+    index_redis_ttl_s: int = Field(
+        default=1800,
+        description="TTL for Redis-backed index entries (seconds)",
     )
 
     event_bus_backend: str = Field(
@@ -288,13 +332,22 @@ class PlatformConfig(BaseSettings):
     redis_url: str = Field(default="redis://localhost:6379/0", description="Redis URL")
     neo4j_uri: str = Field(default="bolt://localhost:7687", description="Neo4j connection URI")
     neo4j_user: str = Field(default="neo4j")
-    neo4j_password: str = Field(default="", description="Neo4j password")
+    neo4j_password: SecretStr = Field(
+        default=SecretStr(""),
+        description="Neo4j password",
+    )
 
     @model_validator(mode="after")
     def _validate_runtime_settings(self) -> PlatformConfig:
         valid_roles = {"all", "gateway", "processor"}
         if self.runtime_role not in valid_roles:
             raise ValueError(f"runtime_role must be one of {sorted(valid_roles)}")
+
+        valid_interceptor_modes = {"passive", "advisory", "active"}
+        if self.interceptor_mode.lower() not in valid_interceptor_modes:
+            raise ValueError(
+                f"interceptor_mode must be one of {sorted(valid_interceptor_modes)}"
+            )
 
         valid_bus_backends = {"memory", "kafka"}
         if self.event_bus_backend not in valid_bus_backends:
@@ -303,6 +356,12 @@ class PlatformConfig(BaseSettings):
         valid_index_backends = {"memory", "redis"}
         if self.index_backend not in valid_index_backends:
             raise ValueError(f"index_backend must be one of {sorted(valid_index_backends)}")
+        if self.index_redis_ttl_s <= 0:
+            raise ValueError("index_redis_ttl_s must be > 0")
+
+        valid_graph_backends = {"memory", "neo4j"}
+        if self.graph_backend not in valid_graph_backends:
+            raise ValueError(f"graph_backend must be one of {sorted(valid_graph_backends)}")
 
         if self.api_ingest_rate_limit_per_minute <= 0:
             raise ValueError("api_ingest_rate_limit_per_minute must be > 0")
@@ -316,10 +375,10 @@ class PlatformConfig(BaseSettings):
             )
 
         production_like = self.environment.lower() in {"production", "staging"}
-        if production_like and not self.neo4j_password:
+        if production_like and not _secret_value(self.neo4j_password):
             raise ValueError("neo4j_password must be configured in production/staging")
 
-        non_production_envs = {"development", "dev", "test", "testing", "local"}
+        non_production_envs = {"development", "dev", "test", "testing", "local", "demo"}
         env_name = self.environment.lower()
         if production_like and not self.auth.enabled:
             raise ValueError("auth.enabled must be true in production/staging")
@@ -331,18 +390,22 @@ class PlatformConfig(BaseSettings):
         algorithm = self.auth.jwt_algorithm.upper()
         if self.auth.enabled:
             bypass_allowed = env_name in non_production_envs and self.auth.allow_dev_bypass
-            if algorithm.startswith("HS") and not self.auth.jwt_hs256_secret and not bypass_allowed:
+            if (
+                algorithm.startswith("HS")
+                and not _secret_value(self.auth.jwt_hs256_secret)
+                and not bypass_allowed
+            ):
                 raise ValueError("auth.jwt_hs256_secret is required for HS* auth algorithms")
             if (
                 algorithm.startswith("RS")
-                and not self.auth.jwt_public_key_pem
+                and not _secret_value(self.auth.jwt_public_key_pem)
                 and not bypass_allowed
             ):
                 raise ValueError("auth.jwt_public_key_pem is required for RS* auth algorithms")
 
         if production_like and algorithm.startswith("HS"):
             weak_defaults = {"", "dev-only-secret"}
-            if self.auth.jwt_hs256_secret in weak_defaults:
+            if _secret_value(self.auth.jwt_hs256_secret) in weak_defaults:
                 raise ValueError(
                     "auth.jwt_hs256_secret must be set to a strong non-default "
                     "value in production/staging"
@@ -367,4 +430,20 @@ class PlatformConfig(BaseSettings):
         ) and not self.redis_url.startswith("rediss://"):
             raise ValueError("redis_url must use rediss:// in production/staging")
 
+        if (
+            production_like
+            and self.runtime_role in {"all", "processor"}
+            and self.graph_backend != "neo4j"
+        ):
+            raise ValueError(
+                "graph_backend must be 'neo4j' in production/staging for processor workloads"
+            )
+
         return self
+
+
+def _secret_value(value: SecretStr | str) -> str:
+    """Support SecretStr-backed settings without breaking existing assignments in tests."""
+    if isinstance(value, SecretStr):
+        return value.get_secret_value()
+    return value

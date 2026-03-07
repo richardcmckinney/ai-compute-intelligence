@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
     from aci.confidence.calibration import CalibrationEngine
     from aci.core.event_bus import InMemoryEventBus, KafkaEventBus
-    from aci.graph.store import GraphStore
+    from aci.graph.store import GraphStoreProtocol
     from aci.hre.engine import HeuristicReconciliationEngine
     from aci.index.materializer import IndexMaterializer
     from aci.policy.engine import PolicyEngine
@@ -52,7 +52,7 @@ class AttributionProcessor:
     def __init__(
         self,
         event_bus: InMemoryEventBus | KafkaEventBus,
-        graph_store: GraphStore,
+        graph_store: GraphStoreProtocol,
         hre: HeuristicReconciliationEngine,
         calibration: CalibrationEngine,
         materializer: IndexMaterializer,
@@ -120,7 +120,14 @@ class AttributionProcessor:
                 budget = self.policy_engine.get_budget_context(team_id)
                 allowlist = self.policy_engine.get_model_allowlist(team_id)
                 tokens = self.policy_engine.get_token_budgets(team_id)
-                policy_ctx = {**budget, "model_allowlist": allowlist, **tokens}
+                cost_ceiling = self.policy_engine.get_cost_ceiling(team_id)
+                policy_ctx = {
+                    **budget,
+                    "model_allowlist": allowlist,
+                    **tokens,
+                }
+                if cost_ceiling is not None:
+                    policy_ctx["cost_ceiling_per_request_usd"] = cost_ceiling
 
             # Materialize into the index.
             self.materializer.materialize_attribution(result, policies=policy_ctx)
@@ -240,8 +247,19 @@ class AttributionProcessor:
         old_team = attrs.get("previous_team", "")
         new_team = attrs.get("new_team", "")
 
-        if old_team and new_team:
-            # Close old membership edge and create new one.
+        if not attrs.get("person_id"):
+            self._processed_count += 1
+            return
+
+        if old_team and old_team != new_team:
+            self.graph.close_edge(
+                edge_type=EdgeType.MEMBER_OF,
+                from_id=person_id,
+                to_id=f"team:{old_team}",
+                valid_to=event.event_time,
+            )
+
+        if new_team and old_team != new_team:
             self.graph.add_edge(
                 GraphEdge(
                     edge_type=EdgeType.MEMBER_OF,

@@ -41,7 +41,7 @@ COPY pyproject.toml ./
 COPY src/ src/
 COPY frontend/ frontend/
 
-RUN useradd --create-home --shell /bin/bash aci && \
+RUN useradd --create-home --shell /bin/bash --uid 1000 --user-group aci && \
     mkdir -p /tmp && \
     chown -R aci:aci /app /tmp
 USER aci
@@ -51,4 +51,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 EXPOSE 8000
 
-CMD ["uvicorn", "aci.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+CMD ["sh", "-c", "uvicorn aci.api.app:app --host 0.0.0.0 --port 8000 --workers ${ACI_UVICORN_WORKERS:-1}"]

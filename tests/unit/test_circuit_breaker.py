@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-import time
+from typing import TYPE_CHECKING
 
 from aci.interceptor.circuit_breaker import CircuitBreaker, CircuitState
+
+if TYPE_CHECKING:
+    from _pytest.monkeypatch import MonkeyPatch
 
 
 def test_opens_after_threshold_failures() -> None:
@@ -16,13 +19,15 @@ def test_opens_after_threshold_failures() -> None:
     assert cb.is_open is True
 
 
-def test_half_open_limits_probe_requests() -> None:
+def test_half_open_limits_probe_requests(monkeypatch: MonkeyPatch) -> None:
+    current_time = 100.0
+    monkeypatch.setattr("aci.interceptor.circuit_breaker.time.time", lambda: current_time)
     cb = CircuitBreaker(failure_threshold=1, reset_timeout_s=0.01, half_open_max_probes=2)
 
     cb.record_failure()
     assert cb.state == CircuitState.OPEN.value
 
-    time.sleep(0.02)
+    current_time += 0.02
 
     # Two probes allowed.
     assert cb.is_open is False
@@ -32,11 +37,13 @@ def test_half_open_limits_probe_requests() -> None:
     assert cb.is_open is True
 
 
-def test_successful_half_open_probes_close_circuit() -> None:
+def test_successful_half_open_probes_close_circuit(monkeypatch: MonkeyPatch) -> None:
+    current_time = 100.0
+    monkeypatch.setattr("aci.interceptor.circuit_breaker.time.time", lambda: current_time)
     cb = CircuitBreaker(failure_threshold=1, reset_timeout_s=0.01, half_open_max_probes=2)
 
     cb.record_failure()
-    time.sleep(0.02)
+    current_time += 0.02
 
     assert cb.is_open is False
     cb.record_success()
@@ -48,11 +55,13 @@ def test_successful_half_open_probes_close_circuit() -> None:
     assert cb.is_open is False
 
 
-def test_failed_half_open_probe_reopens_circuit() -> None:
+def test_failed_half_open_probe_reopens_circuit(monkeypatch: MonkeyPatch) -> None:
+    current_time = 100.0
+    monkeypatch.setattr("aci.interceptor.circuit_breaker.time.time", lambda: current_time)
     cb = CircuitBreaker(failure_threshold=1, reset_timeout_s=0.01, half_open_max_probes=2)
 
     cb.record_failure()
-    time.sleep(0.02)
+    current_time += 0.02
 
     assert cb.is_open is False
     cb.record_failure()

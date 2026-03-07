@@ -35,7 +35,7 @@ class TestEquivalenceVerifier:
             EquivalenceClass(
                 class_id="cs-chat",
                 name="Customer Support Chat",
-                approved_models=["gpt-4o-mini", "gpt-4o", "claude-3-haiku"],
+                approved_models=["gpt-4o-mini", "gpt-4o", "gemini-1.5-flash"],
                 use_case="Customer support conversations",
             )
         )

@@ -13,6 +13,10 @@ Full property graph with time-versioned edges. Updated asynchronously by the
 reconciliation engine. Never queried on the decision-time critical path.
 Supports point-in-time traversal for historical attribution reconstruction.
 
+For local demos and tests, the same graph interface is backed by an explicit
+`InMemoryGraphStore`. The demo profile does not pretend to be the production topology;
+it uses the in-memory backend deliberately for deterministic reviewer walkthroughs.
+
 **Tier 2: Precomputed Attribution Index (Redis + Local Process Cache)**
 Flat, denormalized index entries optimized for O(1) hash lookups. Materialized
 from Tier 1 by the index builder. This is the ONLY data structure the interceptor
@@ -85,6 +89,12 @@ Operational hardening:
 - Dead-letter topic for poison events or handler failures.
 - Consumer lag metrics exported for replay and processing SLO monitoring.
 
+## Runtime Profiles
+
+- `demo`: single-worker, in-memory graph/event/index backends with deterministic seeding.
+- `development` via `docker-compose.yml`: shared-backend local stack using Neo4j + Kafka + Redis.
+- `production/staging`: role-segregated gateway/processor deployments with explicit backend selection.
+
 ## Confidence Governance
 
 Empirical calibration via isotonic regression, per reconciliation method.
@@ -107,11 +117,10 @@ and confidence risk premium.
 
 ## Security Model
 
-- Deployed within customer VPC (no data exfiltration)
-- mTLS for all inter-service communication
-- RBAC with team-scoped visibility
-- OPA-based policy enforcement
-- Non-root container execution
+- Designed for deployment within the customer trust boundary
+- JWT-based service authentication on `/v1/*`
+- Team-scoped attribution and policy context
+- Non-root container execution with read-only root filesystem
 - No secrets in images; injected at runtime
 - Segmented gateway/processor deployments with default-deny network policies
-- Gateway egress restricted to DNS + read-only attribution index path (Redis)
+- Gateway role restricted to decision-time interception and read-only index access

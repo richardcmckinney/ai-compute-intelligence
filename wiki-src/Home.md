@@ -3,11 +3,11 @@
 Welcome. This wiki is optimized for technical and business diligence.
 
 ## Quick Links
-- [Platform Overview](Platform-Overview)
-- [Technical Architecture](Technical-Architecture)
-- [Security and Trust Boundary](Security-and-Trust-Boundary)
-- [Operations and Deployment](Operations-and-Deployment)
-- [YC Diligence Notes](YC-Diligence-Notes)
+- [Platform Overview](https://github.com/richardcmckinney/ai-compute-intelligence/wiki/Platform-Overview)
+- [Technical Architecture](https://github.com/richardcmckinney/ai-compute-intelligence/wiki/Technical-Architecture)
+- [Security and Trust Boundary](https://github.com/richardcmckinney/ai-compute-intelligence/wiki/Security-and-Trust-Boundary)
+- [Operations and Deployment](https://github.com/richardcmckinney/ai-compute-intelligence/wiki/Operations-and-Deployment)
+- [Technical Due Diligence Guide](https://github.com/richardcmckinney/ai-compute-intelligence/wiki/Technical-Due-Diligence-Guide)
 
 ## What This Platform Does
 AI Compute Intelligence helps enterprises understand and optimize AI spend at decision time.
