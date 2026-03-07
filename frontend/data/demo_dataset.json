@@ -12,19 +12,74 @@
     "total_spend_usd": 746800,
     "requests_30d": 5821041,
     "spend_trend_k_usd": [
-      { "month": "Aug", "total": 412, "attributed": 298, "captured": 0 },
-      { "month": "Sep", "total": 489, "attributed": 367, "captured": 0 },
-      { "month": "Oct", "total": 567, "attributed": 453, "captured": 0 },
-      { "month": "Nov", "total": 634, "attributed": 521, "captured": 12 },
-      { "month": "Dec", "total": 718, "attributed": 646, "captured": 39 },
-      { "month": "Jan", "total": 791, "attributed": 735, "captured": 67 },
-      { "month": "Feb", "total": 847, "attributed": 813, "captured": 112 }
+      {
+        "month": "Aug",
+        "total": 412,
+        "attributed": 298,
+        "captured": 0
+      },
+      {
+        "month": "Sep",
+        "total": 489,
+        "attributed": 367,
+        "captured": 0
+      },
+      {
+        "month": "Oct",
+        "total": 567,
+        "attributed": 453,
+        "captured": 0
+      },
+      {
+        "month": "Nov",
+        "total": 634,
+        "attributed": 521,
+        "captured": 12
+      },
+      {
+        "month": "Dec",
+        "total": 718,
+        "attributed": 646,
+        "captured": 39
+      },
+      {
+        "month": "Jan",
+        "total": 791,
+        "attributed": 735,
+        "captured": 67
+      },
+      {
+        "month": "Feb",
+        "total": 847,
+        "attributed": 813,
+        "captured": 112
+      }
     ],
     "data_freshness": [
-      { "name": "Ingestion latency p95", "target": "< 60s", "actual": "41s", "status": "green" },
-      { "name": "Graph refresh", "target": "<= 60m", "actual": "34m", "status": "green" },
-      { "name": "Index materialization", "target": "<= 5m", "actual": "2m 18s", "status": "green" },
-      { "name": "Policy bundle propagation", "target": "<= 3m", "actual": "1m 12s", "status": "green" }
+      {
+        "name": "Ingestion latency p95",
+        "target": "< 60s",
+        "actual": "41s",
+        "status": "green"
+      },
+      {
+        "name": "Graph refresh",
+        "target": "<= 60m",
+        "actual": "34m",
+        "status": "green"
+      },
+      {
+        "name": "Index materialization",
+        "target": "<= 5m",
+        "actual": "2m 18s",
+        "status": "green"
+      },
+      {
+        "name": "Policy bundle propagation",
+        "target": "<= 3m",
+        "actual": "1m 12s",
+        "status": "green"
+      }
     ]
   },
   "teams": [
@@ -39,7 +94,11 @@
       "optimization_potential_usd": 31200,
       "optimization_pct": 14.3,
       "top_workload": "Code Intelligence",
-      "top_models": ["gemini-2.0-flash", "gpt-4-turbo", "gemini-1.5-flash"],
+      "top_models": [
+        "gemini-2.0-flash",
+        "gpt-4-turbo",
+        "gemini-1.5-flash"
+      ],
       "cloud": "AWS",
       "trac_usd": 226900
     },
@@ -54,7 +113,11 @@
       "optimization_potential_usd": 42800,
       "optimization_pct": 22.8,
       "top_workload": "Training Pipeline",
-      "top_models": ["gpt-4o", "gemini-2.0-flash", "gemini-1.5-pro"],
+      "top_models": [
+        "gpt-4o",
+        "gemini-2.0-flash",
+        "gemini-1.5-pro"
+      ],
       "cloud": "GCP",
       "trac_usd": 198400
     },
@@ -69,7 +132,11 @@
       "optimization_potential_usd": 18900,
       "optimization_pct": 14.1,
       "top_workload": "Customer Copilot",
-      "top_models": ["gpt-4o-mini", "gemini-1.5-flash", "gpt-4-turbo"],
+      "top_models": [
+        "gpt-4o-mini",
+        "gemini-1.5-flash",
+        "gpt-4-turbo"
+      ],
       "cloud": "AWS",
       "trac_usd": 139800
     },
@@ -84,7 +151,10 @@
       "optimization_potential_usd": 15200,
       "optimization_pct": 15.4,
       "top_workload": "Analytics Engine",
-      "top_models": ["gpt-4o", "gemini-2.0-flash"],
+      "top_models": [
+        "gpt-4o",
+        "gemini-2.0-flash"
+      ],
       "cloud": "Azure",
       "trac_usd": 104200
     },
@@ -99,7 +169,10 @@
       "optimization_potential_usd": 22100,
       "optimization_pct": 29.0,
       "top_workload": "Support Automation",
-      "top_models": ["gemini-2.0-flash", "gpt-4o-mini"],
+      "top_models": [
+        "gemini-2.0-flash",
+        "gpt-4o-mini"
+      ],
       "cloud": "AWS",
       "trac_usd": 82100
     },
@@ -114,7 +187,10 @@
       "optimization_potential_usd": 8400,
       "optimization_pct": 16.0,
       "top_workload": "Threat Analysis",
-      "top_models": ["gpt-4-turbo", "gemini-2.0-flash"],
+      "top_models": [
+        "gpt-4-turbo",
+        "gemini-2.0-flash"
+      ],
       "cloud": "Azure",
       "trac_usd": 55900
     },
@@ -129,7 +205,10 @@
       "optimization_potential_usd": 6900,
       "optimization_pct": 15.8,
       "top_workload": "Literature Analysis",
-      "top_models": ["gpt-4.1", "gpt-4o"],
+      "top_models": [
+        "gpt-4.1",
+        "gpt-4o"
+      ],
       "cloud": "GCP",
       "trac_usd": 49200
     },
@@ -144,7 +223,10 @@
       "optimization_potential_usd": 9200,
       "optimization_pct": 25.8,
       "top_workload": "Content Generation",
-      "top_models": ["gpt-4o-mini", "dall-e-3"],
+      "top_models": [
+        "gpt-4o-mini",
+        "dall-e-3"
+      ],
       "cloud": "AWS",
       "trac_usd": 38100
     }
@@ -691,156 +773,440 @@
   },
   "glossary": [
     {
+      "category": "Platform Foundation",
+      "term": "AI Compute Intelligence",
+      "aka": "ACI",
+      "definition": "Decision-time cost governance platform that attributes AI spend to accountable owners and turns that attribution into policy controls, interventions, and planning signals.",
+      "why_it_matters": "It is not just a reporting layer. The platform is designed to influence request-time behavior, planning, and governance using the same underlying attribution system."
+    },
+    {
+      "category": "Platform Foundation",
+      "term": "Graph Store",
+      "aka": "Tier 1",
+      "definition": "Authoritative attribution graph that stores entities, relationships, and time-valid evidence connecting requests to services, teams, budgets, and owners.",
+      "why_it_matters": "This is where attribution logic becomes rebuildable and explainable instead of being trapped in one-off joins or dashboard logic."
+    },
+    {
+      "category": "Platform Foundation",
+      "term": "Materialization",
+      "aka": null,
+      "definition": "Process that converts graph evidence into precomputed serving keys and request-time attribution records for low-latency lookup.",
+      "why_it_matters": "Materialization is what allows complex reconciliation to happen asynchronously while the hot path remains O(1)."
+    },
+    {
+      "category": "Platform Foundation",
+      "term": "Attribution Index",
+      "aka": "Tier 2",
+      "definition": "Low-latency serving layer that stores the latest attributed state needed by the interceptor, dashboards, and policy surfaces.",
+      "why_it_matters": "It separates expensive evidence resolution from decision-time enforcement so the system can stay within tight latency budgets."
+    },
+    {
+      "category": "Attribution and Evidence",
       "term": "Attribution Coverage",
       "aka": null,
-      "definition": "Percentage of total AI spend attributed to a team, project, or cost center above the configured confidence floor."
+      "definition": "Percentage of AI spend or request volume that can be assigned to an accountable owner above the configured confidence floor.",
+      "why_it_matters": "High coverage means the platform can support trustworthy chargeback, budgeting, and intervention prioritization."
     },
     {
-      "term": "Confidence Floor",
+      "category": "Attribution and Evidence",
+      "term": "Attribution Chain",
       "aka": null,
-      "definition": "Minimum attribution confidence required for automated chargebacks. Default shown in this demo is 0.80."
+      "definition": "Structured evidence path that links a model request to the workload, codebase, identity, team, budget owner, and cost center responsible for it.",
+      "why_it_matters": "The chain is what lets a reviewer see not only the answer, but the evidence used to produce it."
     },
     {
-      "term": "Fail-Open",
-      "aka": null,
-      "definition": "Safety guarantee that platform failure never blocks workload execution; requests pass through unmodified on error or timeout."
-    },
-    {
-      "term": "Interceptor",
-      "aka": null,
-      "definition": "Decision-time component in the request path that enriches requests with cost and attribution context under strict latency budgets."
-    },
-    {
-      "term": "Advisory Mode",
-      "aka": "Deployment Mode",
-      "definition": "Operating mode where the platform only provides guidance headers and recommendations without automatic request mutation."
-    },
-    {
-      "term": "Active Mode",
-      "aka": "Deployment Mode",
-      "definition": "Opt-in mode allowing controlled model routing or policy gates when equivalence checks and safety conditions are met."
-    },
-    {
+      "category": "Attribution and Evidence",
       "term": "Heuristic Reconciliation Engine",
       "aka": "HRE",
-      "definition": "Engine that combines billing, CI/CD, source control, identity, org hierarchy, and ERP signals into confidence-calibrated attribution chains."
+      "definition": "Engine that combines multiple evidence methods, such as direct mappings, temporal joins, naming patterns, historical behavior, and identity signals, into a unified attribution result.",
+      "why_it_matters": "Most enterprise AI usage cannot be attributed through a single perfect key. The HRE is the core mechanism for resolving messy real-world evidence."
     },
     {
-      "term": "Capability Equivalence Verification",
+      "category": "Attribution and Evidence",
+      "term": "Provenance",
       "aka": null,
-      "definition": "Verification process confirming that a lower-cost model delivers equivalent quality for a specific workload before routing changes are allowed."
+      "definition": "Record of which source systems, methods, and timestamps contributed to an attribution decision.",
+      "why_it_matters": "Provenance is necessary for auditability, reviewer trust, and human remediation when evidence is weak or conflicting."
     },
     {
-      "term": "Optimization Category",
+      "category": "Attribution and Evidence",
+      "term": "Resource Fingerprint",
       "aka": null,
-      "definition": "Predefined class of addressable spend such as model over-provisioning, duplicate requests, or staging sprawl."
+      "definition": "Stable key derived from request or workload characteristics that the platform uses to look up previously materialized attribution state.",
+      "why_it_matters": "A stable serving key is what lets the interceptor attach governance context without re-running reconciliation on every request."
     },
     {
-      "term": "Threshold Condition",
+      "category": "Attribution and Evidence",
+      "term": "Ground Truth",
       "aka": null,
-      "definition": "Specific data signal or signal combination that triggers an optimization recommendation."
+      "definition": "Verified attribution examples collected from manual review, known ownership records, or confirmed operational data.",
+      "why_it_matters": "Ground truth is how the system improves confidence calibration instead of relying permanently on hand-tuned heuristics."
     },
     {
-      "term": "Conditional Rule Set",
+      "category": "Attribution and Evidence",
+      "term": "Manual Mapping",
       "aka": null,
-      "definition": "Collection of deterministic if-then rules mapping observed patterns to recommendation categories."
+      "definition": "Explicit human correction that binds a workload, service, or request pattern to the correct organizational owner when automated evidence is insufficient.",
+      "why_it_matters": "Manual mapping closes the gap between observable telemetry and business reality, especially for legacy or ambiguous workloads."
     },
     {
+      "category": "Attribution and Evidence",
+      "term": "Budget Owner",
+      "aka": null,
+      "definition": "Named business or engineering owner accountable for the spend attached to a workload or intervention domain.",
+      "why_it_matters": "This is the person or team who can approve spend, absorb chargeback, or execute remediation."
+    },
+    {
+      "category": "Attribution and Evidence",
+      "term": "Cost Center",
+      "aka": null,
+      "definition": "Financial grouping used to allocate AI spend into budgeting, reporting, and enterprise accounting structures.",
+      "why_it_matters": "Cost center alignment is what makes platform attribution useful to finance and operating reviews, not just engineering dashboards."
+    },
+    {
+      "category": "Confidence and Economics",
+      "term": "Confidence Score",
+      "aka": null,
+      "definition": "Calibrated probability-like score representing how strongly the evidence supports a given attribution result.",
+      "why_it_matters": "The platform does not treat all attribution equally. Confidence determines which results are safe for chargeback, routing, or human escalation."
+    },
+    {
+      "category": "Confidence and Economics",
+      "term": "Confidence Tier",
+      "aka": null,
+      "definition": "Simplified high, medium, or low band assigned to a calibrated confidence score for governance and user interpretation.",
+      "why_it_matters": "Tiers make the confidence model operationally legible to finance, engineering, and reviewers who do not want to reason in raw decimals."
+    },
+    {
+      "category": "Confidence and Economics",
+      "term": "Confidence Floor",
+      "aka": null,
+      "definition": "Minimum confidence required before the platform treats attribution as strong enough for automated governance or financial roll-up.",
+      "why_it_matters": "This protects the business from automating actions on evidence that is directionally useful but not yet defensible."
+    },
+    {
+      "category": "Confidence and Economics",
       "term": "TRAC",
       "aka": "Total Risk-Adjusted Cost",
-      "definition": "Billed cost plus confidence risk premium, used to compare workloads with different attribution certainty."
+      "definition": "MVP decision metric computed as billed request cost plus a confidence risk premium, allowing low-certainty activity to be compared against high-certainty alternatives.",
+      "why_it_matters": "TRAC makes uncertainty economically visible, which is useful when comparing optimization candidates or deciding where governance effort should go first."
     },
     {
+      "category": "Confidence and Economics",
+      "term": "Confidence Risk Premium",
+      "aka": null,
+      "definition": "Incremental cost penalty added when attribution confidence is weak, reflecting the governance and decision risk of uncertain ownership.",
+      "why_it_matters": "Two requests with identical billed cost are not equally actionable if one can be attributed confidently and the other cannot."
+    },
+    {
+      "category": "Confidence and Economics",
+      "term": "Addressable Spend",
+      "aka": null,
+      "definition": "Portion of observed AI spend that the platform believes can be reduced, rerouted, or governed through identified interventions.",
+      "why_it_matters": "Addressable spend is the starting pool for savings analysis; it is not the same thing as realized savings."
+    },
+    {
+      "category": "Confidence and Economics",
+      "term": "Realized Savings",
+      "aka": null,
+      "definition": "Portion of estimated savings that has actually converted into lower run-rate spend because an intervention was approved and executed.",
+      "why_it_matters": "This distinguishes modeled upside from operationally captured value."
+    },
+    {
+      "category": "Interventions and Policy",
+      "term": "Interceptor",
+      "aka": null,
+      "definition": "Decision-time service that looks up attribution state, evaluates policy, and returns pass-through guidance or controls under a strict latency budget.",
+      "why_it_matters": "The interceptor is the bridge between offline attribution work and real-time governance."
+    },
+    {
+      "category": "Interventions and Policy",
+      "term": "Policy Engine",
+      "aka": null,
+      "definition": "Evaluation layer that applies allowlists, budget ceilings, confidence floors, and routing conditions to attributed requests.",
+      "why_it_matters": "It centralizes governance logic so controls are consistent, inspectable, and not buried in custom application code."
+    },
+    {
+      "category": "Interventions and Policy",
+      "term": "Advisory Mode",
+      "aka": "Deployment Mode",
+      "definition": "Mode where the platform computes and returns guidance but does not automatically change request behavior.",
+      "why_it_matters": "This is the safest starting posture because it proves the system and its economics before any automatic enforcement is enabled."
+    },
+    {
+      "category": "Interventions and Policy",
+      "term": "Active Mode",
+      "aka": "Deployment Mode",
+      "definition": "Mode where approved policies can actively route, gate, or constrain requests when safety and equivalence conditions are satisfied.",
+      "why_it_matters": "Active mode is where attribution turns into operational savings and policy enforcement, but only after evidence quality is acceptable."
+    },
+    {
+      "category": "Interventions and Policy",
+      "term": "Fail-Open",
+      "aka": null,
+      "definition": "Availability guarantee that if the governance layer times out or errors, the request proceeds without enforcement rather than blocking the workload.",
+      "why_it_matters": "This is critical for production trust. The platform cannot be allowed to become a single point of failure in the inference path."
+    },
+    {
+      "category": "Interventions and Policy",
+      "term": "Circuit Breaker",
+      "aka": null,
+      "definition": "Protective mechanism that suppresses repeated governance failures by temporarily bypassing slow or unhealthy decision logic.",
+      "why_it_matters": "It preserves low latency and predictable service behavior during outages or degraded upstream conditions."
+    },
+    {
+      "category": "Interventions and Policy",
+      "term": "Shadow Warming",
+      "aka": null,
+      "definition": "Background refresh pattern that records cache misses and uses them to repopulate attribution state asynchronously without blocking live traffic.",
+      "why_it_matters": "This improves hot-path hit rates while keeping reconciliation off the request path."
+    },
+    {
+      "category": "Interventions and Policy",
+      "term": "Soft Stop",
+      "aka": null,
+      "definition": "Policy outcome that warns, flags, or requests review while still allowing the request to proceed.",
+      "why_it_matters": "Soft stops let operators surface risky or expensive behavior before they are ready to hard-enforce it."
+    },
+    {
+      "category": "Interventions and Policy",
+      "term": "Hard Stop",
+      "aka": null,
+      "definition": "Policy outcome that prevents a request or planned action from proceeding because it violates a non-negotiable control.",
+      "why_it_matters": "Hard stops are reserved for conditions where the business has decided that cost, compliance, or quality risk outweighs convenience."
+    },
+    {
+      "category": "Interventions and Policy",
+      "term": "Capability Equivalence Verification",
+      "aka": "CEV",
+      "definition": "Verification process used before automated model downgrades or reroutes to show that a lower-cost alternative preserves acceptable task quality.",
+      "why_it_matters": "Savings claims are not credible if the cheaper model silently degrades the workload."
+    },
+    {
+      "category": "Interventions and Policy",
+      "term": "Intervention",
+      "aka": null,
+      "definition": "Actionable recommendation generated by the platform, such as a routing change, caching improvement, spend guardrail, or duplicate-request reduction.",
+      "why_it_matters": "Interventions are the operational output of the platform; they turn attribution into business action."
+    },
+    {
+      "category": "Interventions and Policy",
+      "term": "Optimization Category",
+      "aka": null,
+      "definition": "Named class of opportunity such as model oversizing, duplicate requests, staging sprawl, budget drift, or routing inefficiency.",
+      "why_it_matters": "Categorization makes the intervention portfolio legible and easier to prioritize across teams and programs."
+    },
+    {
+      "category": "Interventions and Policy",
+      "term": "Threshold Condition",
+      "aka": null,
+      "definition": "Specific signal or rule boundary that must be crossed before a recommendation is emitted.",
+      "why_it_matters": "Thresholds keep the system explainable. A reviewer should be able to see why a recommendation appeared when it did."
+    },
+    {
+      "category": "Forecasting and Planning",
+      "term": "Planning Horizon",
+      "aka": null,
+      "definition": "Forward-looking forecast window used to project AI spend under a chosen scenario, such as 3, 6, 9, 12, 18, or 24 months.",
+      "why_it_matters": "Different operating decisions matter at different time scales. Near-term controls and long-range capacity planning are not the same conversation."
+    },
+    {
+      "category": "Forecasting and Planning",
       "term": "Baseline Forecast",
       "aka": "Forecast Scenario",
-      "definition": "Reference planning case that extends observed demand and current governance posture without assuming additional intervention capture."
+      "definition": "Reference planning case that extends current spend, demand growth, and governance posture without assuming incremental optimization capture.",
+      "why_it_matters": "Baseline is the comparison point for every other scenario; it answers what happens if the organization simply continues as-is."
     },
     {
+      "category": "Forecasting and Planning",
       "term": "Growth Push",
       "aka": "Forecast Scenario",
-      "definition": "Upside demand case where product adoption, request volume, and model usage grow faster than the current observed trend."
+      "definition": "Upside-demand case where adoption accelerates, request volume grows faster, and current control posture does not offset the added usage.",
+      "why_it_matters": "It stress-tests how quickly AI spend can expand when product demand or internal adoption rises."
     },
     {
+      "category": "Forecasting and Planning",
       "term": "Policy Hardened",
       "aka": "Forecast Scenario",
-      "definition": "Control case where stronger allowlists, budget ceilings, and confidence floors constrain outlier spend and dampen growth."
+      "definition": "Control case where budget ceilings, allowlists, confidence floors, and governance discipline constrain outlier usage and moderate growth.",
+      "why_it_matters": "It shows the value of stronger controls even before major optimization programs are fully implemented."
     },
     {
+      "category": "Forecasting and Planning",
       "term": "Optimization Capture",
       "aka": "Forecast Scenario",
-      "definition": "Execution case where approved routing, caching, and duplicate-request interventions convert into durable run-rate savings."
+      "definition": "Execution case where approved interventions convert into sustained run-rate savings over the selected planning horizon.",
+      "why_it_matters": "This is the scenario that answers whether the platform can translate identified waste into actually captured value."
+    },
+    {
+      "category": "Deployment and Trust Boundary",
+      "term": "Trust Boundary",
+      "aka": null,
+      "definition": "Deliberate separation between customer-controlled data paths and the services permitted to observe or act on that data.",
+      "why_it_matters": "It is central to enterprise adoption because buyers want governance without surrendering raw telemetry unnecessarily."
+    },
+    {
+      "category": "Deployment and Trust Boundary",
+      "term": "Decision-Time Governance",
+      "aka": null,
+      "definition": "Application of attribution, economics, and policy at the moment a request is about to execute rather than only after spend has already occurred.",
+      "why_it_matters": "This is what makes the platform operational rather than purely analytical."
     }
   ],
   "faq": [
     {
-      "category": "Deployment and Safety",
+      "category": "Platform Fundamentals",
+      "description": "What the platform is, what problem it solves, and how to interpret the demo at a high level.",
       "items": [
         {
-          "question": "How long does initial deployment take?",
-          "answer": "Most teams reach Passive Observation in 1-2 days, then move to Advisory once identity and CI/CD connectors are validated."
+          "question": "What problem does AI Compute Intelligence actually solve?",
+          "answer": "Most companies can see total AI spend but cannot reliably explain which team, service, budget owner, or policy decision created that spend. ACI resolves that ownership chain, quantifies confidence, and turns the result into interventions, governance, and planning signals."
         },
         {
-          "question": "Will the platform block requests by default?",
-          "answer": "No. Default posture is fail-open and advisory. Any gating behavior requires explicit workload opt-in."
+          "question": "How is this different from a normal cloud cost dashboard?",
+          "answer": "Traditional dashboards summarize spend after the fact. ACI is designed to connect request-level behavior to owners and then use that same attribution state for decision-time guidance, policy controls, and intervention prioritization."
         },
         {
-          "question": "Is this demo using customer production data?",
-          "answer": "No. The entire dataset is synthetic and continuously watermarked as simulated."
+          "question": "Who is the primary user of the platform?",
+          "answer": "The platform is built for a cross-functional operating loop: platform engineering, ML infrastructure, finance, security, and leadership all read different parts of the same attribution system. Engineers use it to fix behavior, while finance and leadership use it to understand accountability and savings capture."
+        },
+        {
+          "question": "What should a reviewer focus on first in the demo?",
+          "answer": "Start with Overview for the business posture, then Technical Diagnostics for the evidence chain on a single request, Interventions for how the platform converts attribution into action, and Forecasting for how those actions translate into planning scenarios."
+        },
+        {
+          "question": "Is the demo backed by production customer data?",
+          "answer": "No. The demo is fully synthetic and optimized for diligence. It is intended to show how the platform behaves, what it explains, and what decisions it enables without exposing customer data."
         }
       ]
     },
     {
-      "category": "How Recommendations Work",
+      "category": "Attribution and Confidence",
+      "description": "How the platform resolves ownership, what confidence means, and when humans stay in the loop.",
       "items": [
         {
-          "question": "How does the platform identify optimization opportunities?",
-          "answer": "The platform applies predefined optimization categories and threshold conditions to ingested billing, CI/CD, source-control, identity, and org data. When rule conditions are met, a recommendation is emitted with confidence, risk, and estimated savings."
+          "question": "How does the platform determine who owns a request?",
+          "answer": "It combines cloud telemetry, CI/CD data, source control ownership, runtime context, org hierarchy, and prior mappings into a structured attribution chain. The HRE weighs those signals, calibrates the result, and materializes the latest state into the low-latency index."
         },
         {
-          "question": "What are the dimensions of optimization?",
-          "answer": "The recommendation system evaluates model routing efficiency, prompt/token efficiency, duplicate request behavior, staging and development sprawl, and workload scheduling and pricing opportunities."
+          "question": "What does the confidence score represent?",
+          "answer": "Confidence is a calibrated measure of how strongly the available evidence supports the selected owner. It is not a cosmetic score. It governs whether the result is safe for chargeback, routing, intervention prioritization, or human review."
         },
         {
-          "question": "Are recommendations fixed or adaptive?",
-          "answer": "The current production-ready posture is deterministic and rule-based with configurable thresholds, prioritizing explainability and auditability. Dynamic discovery is a roadmap extension."
+          "question": "What happens when the evidence is weak or conflicting?",
+          "answer": "The platform still surfaces the best-supported chain, but it downgrades the confidence tier and keeps the result out of fully automated financial or control flows when it falls below the configured confidence floor. That is why the UI distinguishes between strong attribution and requests that still need review."
+        },
+        {
+          "question": "When would an operator use Manual Mapping?",
+          "answer": "Manual Mapping is used when a workload is business-critical but the available telemetry is ambiguous, legacy, or incomplete. It lets an operator correct ownership explicitly, which then becomes part of the operating state instead of an external spreadsheet note."
+        },
+        {
+          "question": "Can the platform support chargeback on low-confidence requests?",
+          "answer": "Not automatically. Low-confidence activity is still visible and measurable, but the platform is intentionally conservative about turning uncertain attribution into automated financial allocation."
         }
       ]
     },
     {
-      "category": "Optimization and Governance",
+      "category": "Interventions and Policy Controls",
+      "description": "How the system turns attribution into concrete action while preserving safety and operator control.",
       "items": [
         {
-          "question": "Can teams override recommendations?",
-          "answer": "Yes. Every recommendation can be approved, kept in review, or dismissed. Decisions are session-persistent in this demo and represented in savings metrics."
+          "question": "What is the practical difference between Advisory and Active mode?",
+          "answer": "Advisory mode computes guidance and exposes what the platform would do without mutating live traffic. Active mode allows approved policies and verified alternatives to actually influence routing or enforcement. Advisory proves trust; Active captures value."
         },
         {
-          "question": "How is policy evaluation surfaced?",
-          "answer": "Policy outcomes are available in governance views and event logs, including expected action and fail-open behavior under fault scenarios."
+          "question": "Why is fail-open treated as a feature rather than a weakness?",
+          "answer": "Because the platform sits near a latency-sensitive request path. If governance logic is unavailable, it is safer for inference to continue than for ACI to become a single point of failure. The business tradeoff is explicit: preserve workload availability while logging and alerting on degraded governance."
         },
         {
-          "question": "How are integration notifications used?",
-          "answer": "Slack, email, and webhook channels carry policy violations, budget alerts, and intervention status updates for operational workflows."
+          "question": "What is the difference between a Soft Stop and a Hard Stop?",
+          "answer": "A Soft Stop flags or warns but still allows the request to continue. A Hard Stop blocks the request or planned action because the organization has decided the violation is non-negotiable, such as a disallowed model, a hard budget ceiling, or a control the team is not permitted to override automatically."
         },
         {
-          "question": "How robust are configuration controls?",
-          "answer": "Governance controls are explicit and mode-aware, with fail-open behavior under fault conditions, bounded policy checks, and auditable lifecycle transitions for recommendations."
+          "question": "How does the platform decide which interventions to recommend?",
+          "answer": "It evaluates deterministic threshold conditions across attributed spend, model selection, duplicate behavior, staging sprawl, and policy posture. Each recommendation includes its category, expected savings, confidence, and operational risk so a reviewer can understand both the upside and the tradeoff."
+        },
+        {
+          "question": "Can teams override or dismiss recommendations?",
+          "answer": "Yes. Recommendations are designed to be reviewed, approved, kept in observation, or dismissed. The platform is not built on the assumption that every identified opportunity should be enforced mechanically."
         }
       ]
     },
     {
       "category": "Forecasting and Scenario Planning",
+      "description": "How to read the planning views and what each forecast scenario is intended to demonstrate.",
       "items": [
         {
-          "question": "What does the Baseline forecast assume?",
-          "answer": "Baseline is the reference case. It carries forward observed demand growth and current routing behavior without assuming that new governance controls or optimization work materially reduce spend."
+          "question": "What does the Baseline forecast mean?",
+          "answer": "Baseline is the reference case. It projects what happens if observed demand and current governance posture continue without assuming that additional intervention work converts into savings."
         },
         {
-          "question": "What is the difference between Growth Push, Policy Hardened, and Optimization Capture?",
-          "answer": "Growth Push assumes adoption accelerates and monthly request volume expands faster than the current trend. Policy Hardened assumes stronger budget controls, allowlists, and confidence gates suppress outlier spend. Optimization Capture assumes approved interventions are implemented and produce durable run-rate savings."
+          "question": "What does Growth Push mean?",
+          "answer": "Growth Push assumes adoption accelerates, request volume rises faster than the current trend, and the organization absorbs that added demand without materially changing its control posture."
+        },
+        {
+          "question": "What does Policy Hardened mean?",
+          "answer": "Policy Hardened assumes budget ceilings, allowlists, and confidence gates are applied more aggressively, reducing outlier behavior and dampening the growth rate of spend."
+        },
+        {
+          "question": "What does Optimization Capture mean?",
+          "answer": "Optimization Capture assumes approved recommendations actually get implemented and stick. It is the scenario where identified opportunities convert into durable run-rate savings rather than remaining notional upside."
         },
         {
           "question": "How should an investor interpret these scenarios?",
-          "answer": "They are planning lenses, not opaque black-box outputs. Growth Push tests upside demand pressure, Policy Hardened tests governance discipline, and Optimization Capture tests whether the intervention pipeline can translate into realized savings."
+          "answer": "Treat them as disciplined planning lenses rather than opaque model outputs. Baseline shows inertia, Growth Push shows upside pressure, Policy Hardened shows governance leverage, and Optimization Capture shows whether the product can convert insight into realized value."
+        }
+      ]
+    },
+    {
+      "category": "Deployment, Security, and Trust Boundary",
+      "description": "What an enterprise buyer would want to know about control surfaces, runtime posture, and production deployment assumptions.",
+      "items": [
+        {
+          "question": "Where is the platform intended to run?",
+          "answer": "The target posture is inside the customer trust boundary, with customer-controlled infrastructure handling the event bus, graph store, and serving index. The demo runs locally, but the architecture is organized around enterprise-controlled deployment."
+        },
+        {
+          "question": "How are API calls authenticated?",
+          "answer": "The platform uses service-to-service bearer authentication for protected `/v1/*` routes. In the local demo, development-friendly shortcuts exist only for the explicit demo profile; they are not the intended production posture."
+        },
+        {
+          "question": "What does a production deployment need before Active mode is credible?",
+          "answer": "Reliable ingestion, a durable event bus, the graph and index backends, validated ownership signals, and explicit policy configuration. Active mode only makes sense when the evidence chain and safety controls are already trusted."
+        },
+        {
+          "question": "What happens if a dependency fails during request handling?",
+          "answer": "The interceptor is designed to fail open under timeout or internal error so it does not break inference traffic. That behavior is paired with logging, metrics, and explicit policy state so degraded governance is observable rather than hidden."
+        },
+        {
+          "question": "Why does the architecture separate event bus, graph store, and attribution index?",
+          "answer": "Because they solve different problems. The event bus is the rebuildable system of record, the graph store is the authoritative reasoning surface, and the attribution index is the low-latency serving layer for operational reads."
+        }
+      ]
+    },
+    {
+      "category": "Integrations and Operating Model",
+      "description": "How the platform fits into existing tooling, how quickly it updates, and what the demo surfaces are intended to prove.",
+      "items": [
+        {
+          "question": "Which systems does the platform integrate with?",
+          "answer": "The core model assumes cloud telemetry, CI/CD systems, source control, identity systems, and finance or budget metadata. The demo uses synthetic representations of those signals so the attribution and governance flows can be reviewed without depending on a live enterprise stack."
+        },
+        {
+          "question": "How quickly does the attribution index update after new evidence arrives?",
+          "answer": "The design assumes asynchronous reconciliation followed by materialization into a low-latency serving layer. That means the request path reads precomputed state rather than waiting for graph resolution at request time."
+        },
+        {
+          "question": "What is the purpose of the Technical Diagnostics page?",
+          "answer": "It is a diligence surface, not an operator debug console. Its job is to show a reviewer what the platform knew about a request, what decision it produced, and why that decision is credible."
+        },
+        {
+          "question": "What is the purpose of the Guided Demo panel?",
+          "answer": "It compresses the product narrative into a small number of explainable scenarios: an attributed request, a policy intervention, and fail-open safety. The goal is to make the product legible in a live walkthrough without exposing internal debug noise."
+        },
+        {
+          "question": "How should someone run the demo locally?",
+          "answer": "Clone or unzip the repository, change into the repo root, run `./scripts/run_demo.sh`, and open `http://localhost:8000/platform/`. The README and demo guide now spell out those steps directly instead of assuming the user is already in the correct directory."
         }
       ]
     }
