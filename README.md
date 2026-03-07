@@ -197,6 +197,19 @@ mypy src tests --strict
 pytest -q
 ```
 
+## CI/CD and Release Workflows
+
+GitHub Actions workflows in [`.github/workflows`](.github/workflows):
+
+- `ci.yml`: lint, strict mypy, dependency review, lockfile consistency, unit/integration/glass-jaw tests, Docker smoke, SBOM artifact.
+- `codeql.yml`: static analysis.
+- `dependency-review.yml`: dependency risk gate on PRs.
+- `deploy-gate.yml`: preflight and deployability gate (`push` to `main` and manual dispatch).
+- `cache-hygiene.yml`: periodic cache maintenance.
+- `release.yml`: manual SemVer release dispatch — quality gate, artifact assembly, immutable tag creation, and GitHub release publication.
+
+For the release operator guide, see [docs/releasing.md](docs/releasing.md).
+
 ## Repository Layout
 
 ```text
