@@ -51,6 +51,10 @@ class InterceptorConfig(BaseSettings):
     # Shadow warming: probability of triggering background refresh on cache miss.
     # Prevents thundering herd (Section 6.3).
     shadow_warm_probability: float = Field(default=0.01, description="P(trigger refresh)")
+    shadow_warm_max_tracked_workloads: int = Field(
+        default=10_000,
+        description="Max cached workload refresh timestamps retained for shadow warming",
+    )
 
     # Emit shadow events to the event bus on miss/timeout.
     shadow_events_enabled: bool = Field(default=True)
@@ -92,6 +96,8 @@ class InterceptorConfig(BaseSettings):
                 "active_lite_gate_min_confidence must be greater than or equal to "
                 "active_lite_min_confidence"
             )
+        if self.shadow_warm_max_tracked_workloads <= 0:
+            raise ValueError("shadow_warm_max_tracked_workloads must be greater than 0")
         return self
 
 

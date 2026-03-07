@@ -395,10 +395,10 @@ class TestShadowEventEmission:
         )
 
         result = await interceptor.intercept(request)
-        # Allow the event loop to process the fire-and-forget task.
-        import asyncio
-
-        await asyncio.sleep(0.05)
+        await interceptor.shutdown()
 
         assert result.outcome == InterceptionOutcome.FAIL_OPEN
         assert result.shadow_event_logged is True
+        assert len(received_events) == 1
+        assert received_events[0].event_type == EventType.SHADOW_INTERCEPT_MISS
+        assert received_events[0].attributes["workload_id"] == "unknown-workload"

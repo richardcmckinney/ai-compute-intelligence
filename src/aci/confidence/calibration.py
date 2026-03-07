@@ -219,13 +219,22 @@ class CalibrationEngine:
     ) -> float:
         """Linear interpolation between curve points."""
         if value <= raw_points[0]:
-            return cal_points[0]
+            upper = 0
+            while upper + 1 < len(raw_points) and raw_points[upper + 1] == raw_points[0]:
+                upper += 1
+            return max(cal_points[: upper + 1])
         if value >= raw_points[-1]:
-            return cal_points[-1]
+            lower = len(raw_points) - 1
+            while lower - 1 >= 0 and raw_points[lower - 1] == raw_points[-1]:
+                lower -= 1
+            return max(cal_points[lower:])
 
         for i in range(len(raw_points) - 1):
             if raw_points[i] <= value <= raw_points[i + 1]:
-                t = (value - raw_points[i]) / (raw_points[i + 1] - raw_points[i])
+                denominator = raw_points[i + 1] - raw_points[i]
+                if denominator <= 0:
+                    return max(cal_points[i], cal_points[i + 1])
+                t = (value - raw_points[i]) / denominator
                 return cal_points[i] + t * (cal_points[i + 1] - cal_points[i])
 
         return value  # Fallback: return raw.

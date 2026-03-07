@@ -111,6 +111,7 @@ spec:
       containers:
         - name: aci-platform
           image: aci-platform:0.2.0
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
               name: http
@@ -201,6 +202,7 @@ spec:
       containers:
         - name: aci-platform
           image: aci-platform:0.2.0
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
               name: http

@@ -99,7 +99,7 @@ class ShadowWarmer:
         try:
             await refresh_fn(workload_id)
             with self._lock:
-                self._state.last_refresh[workload_id] = time.monotonic()
+                self._record_refresh_locked(workload_id, time.monotonic())
                 self._refresh_count += 1
             logger.debug("shadow_warmer.refreshed", workload_id=workload_id)
             return True
@@ -124,3 +124,13 @@ class ShadowWarmer:
                 "refreshes_suppressed": self._suppressed_count,
                 "in_progress": len(self._state.in_progress),
             }
+
+    def _record_refresh_locked(self, workload_id: str, refreshed_at: float) -> None:
+        """Record refresh time while bounding memory growth for unique workload IDs."""
+        self._state.last_refresh.pop(workload_id, None)
+        self._state.last_refresh[workload_id] = refreshed_at
+
+        max_entries = self.config.shadow_warm_max_tracked_workloads
+        while len(self._state.last_refresh) > max_entries:
+            oldest_workload = next(iter(self._state.last_refresh))
+            self._state.last_refresh.pop(oldest_workload, None)

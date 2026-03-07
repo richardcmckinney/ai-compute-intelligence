@@ -8,12 +8,13 @@ import pytest
 
 from aci.api.app import AppState, SlidingWindowRateLimiter
 from aci.confidence.calibration import CalibrationEngine
-from aci.config import AuthConfig, PlatformConfig
+from aci.config import AuthConfig, InterceptorConfig, PlatformConfig
 from aci.core.event_bus import InMemoryEventBus
 from aci.core.processor import AttributionProcessor
 from aci.graph.store import GraphStore, InMemoryGraphStore, Neo4jGraphStore, build_graph_store
 from aci.hre.engine import HeuristicReconciliationEngine
 from aci.index.materializer import AttributionIndexStore, IndexMaterializer
+from aci.interceptor.shadow_warming import ShadowWarmer
 from aci.models.attribution import (
     AttributionIndexEntry,
     AttributionPathNode,
@@ -206,6 +207,25 @@ def test_platform_config_validates_policy_timeout_budget() -> None:
         PlatformConfig(
             interceptor={"timeout_ms": 20, "policy_timeout_ms": 25},
         )
+
+
+@pytest.mark.asyncio
+async def test_shadow_warmer_bounds_tracked_refresh_state() -> None:
+    warmer = ShadowWarmer(
+        InterceptorConfig(
+            shadow_warm_probability=1.0,
+            shadow_warm_max_tracked_workloads=2,
+        )
+    )
+
+    async def _refresh(_: str) -> None:
+        return None
+
+    assert await warmer.trigger_refresh("svc-a", _refresh) is True
+    assert await warmer.trigger_refresh("svc-b", _refresh) is True
+    assert await warmer.trigger_refresh("svc-c", _refresh) is True
+
+    assert set(warmer._state.last_refresh) == {"svc-b", "svc-c"}
 
 
 def test_platform_config_model_dump_redacts_secret_values() -> None:

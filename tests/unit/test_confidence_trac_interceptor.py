@@ -132,6 +132,15 @@ class TestCalibrationEngine:
         assert decayed < 0.8
         assert decayed > 0.0
 
+    def test_interpolate_handles_duplicate_raw_points(self) -> None:
+        """Duplicate raw-score points should not trigger division by zero."""
+        calibrated = self.engine._interpolate(
+            [0.2, 0.2, 0.4],
+            [0.1, 0.3, 0.5],
+            0.2,
+        )
+        assert calibrated == pytest.approx(0.3)
+
 
 # ---------------------------------------------------------------------------
 # TRAC Calculator
