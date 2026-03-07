@@ -195,6 +195,19 @@ def test_demo_bootstrap_disabled_in_production() -> None:
         assert "disabled in production" in response.json()["detail"]
 
 
+def test_demo_mode_endpoint_updates_interceptor_mode() -> None:
+    app_state = get_state()
+    app_state.config.environment = "demo"
+
+    with TestClient(app) as client:
+        response = client.post("/v1/demo/mode", json={"mode": "active"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["interceptor_mode"] == "active"
+    assert app_state.interceptor.mode == DeploymentMode.ACTIVE
+
+
 def test_intercept_endpoint_can_be_disabled_by_runtime_role_flag() -> None:
     app_state = get_state()
     app_state.accepts_interception = False
@@ -392,6 +405,44 @@ def test_intercept_gate_returns_413_schema_for_input_token_limit() -> None:
         assert payload["error"]["policy_id"] == "token_budget_input"
         assert payload["error"]["request_id"] == "req-gate-413"
         assert payload["error"]["retry"] is False
+
+
+def test_intercept_gate_returns_403_schema_for_cost_ceiling() -> None:
+    app_state = get_state()
+    app_state.interceptor.mode = DeploymentMode.ACTIVE
+
+    app_state.index_store.materialize(
+        AttributionIndexEntry(
+            workload_id="gate-test-cost",
+            team_id="team-finops",
+            team_name="FinOps",
+            cost_center_id="CC-9900",
+            confidence=0.97,
+            confidence_tier="chargeback_ready",
+            method_used="R1",
+            cost_ceiling_per_request_usd=0.001,
+            approved_alternatives=["gpt-4o-mini"],
+        )
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/intercept",
+            json={
+                "request_id": "req-gate-cost",
+                "model": "gpt-4o",
+                "service_name": "gate-test-cost",
+                "estimated_cost_usd": 0.01,
+                "environment": "staging",
+            },
+        )
+
+    assert response.status_code == 403
+    payload = response.json()
+    assert payload["error"]["type"] == "cost_approval_required"
+    assert payload["error"]["policy_id"] == "cost_ceiling"
+    assert payload["error"]["request_id"] == "req-gate-cost"
+    assert payload["error"]["approved_alternatives"] == ["gpt-4o-mini"]
 
 
 def test_policy_evaluate_endpoint_contract() -> None:

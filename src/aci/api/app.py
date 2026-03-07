@@ -36,6 +36,7 @@ from aci.core.event_schema import EventSchemaValidationError, validate_event_att
 from aci.demo.seeder import bootstrap_demo_state
 from aci.integrations.notifications import NotificationMessage
 from aci.interceptor.gateway import (
+    DeploymentMode,
     InterceptionOutcome,
     InterceptionRequest,
     InterceptionResult,
@@ -371,6 +372,15 @@ class DemoBootstrapResponse(BaseModel):
     environment: str
 
 
+class DemoModeRequest(BaseModel):
+    mode: Literal["passive", "advisory", "active"]
+
+
+class DemoModeResponse(BaseModel):
+    interceptor_mode: str
+    environment: str
+
+
 class PricingRuleResponse(BaseModel):
     provider: str
     model: str
@@ -666,7 +676,8 @@ def _gate_error_from_result(result: InterceptionResult) -> JSONResponse | None:
         violation
         for violation in result.policy_results
         if violation.violated
-        and violation.policy_id in {"token_budget_input", "model_allowlist", "budget_ceiling"}
+        and violation.policy_id
+        in {"token_budget_input", "model_allowlist", "budget_ceiling", "cost_ceiling"}
     ]
     if not hard_violations:
         return None
@@ -709,6 +720,20 @@ def _gate_error_from_result(result: InterceptionResult) -> JSONResponse | None:
                     "request_id": result.request_id,
                     "policy_id": primary.policy_id,
                     "retry_after_seconds": 3600,
+                }
+            },
+        )
+    if primary.policy_id == "cost_ceiling":
+        approved = result.attribution.approved_alternatives if result.attribution else []
+        return JSONResponse(
+            status_code=403,
+            content={
+                "error": {
+                    "type": "cost_approval_required",
+                    "message": primary.details,
+                    "request_id": result.request_id,
+                    "policy_id": primary.policy_id,
+                    "approved_alternatives": approved,
                 }
             },
         )
@@ -891,6 +916,25 @@ async def bootstrap_demo() -> DemoBootstrapResponse:
         events_published=result.events_published,
         graph_nodes=result.graph_nodes,
         graph_edges=result.graph_edges,
+        interceptor_mode=app_state.interceptor.mode.value,
+        environment=app_state.config.environment,
+    )
+
+
+@app.post("/v1/demo/mode", response_model=DemoModeResponse)
+async def set_demo_mode(req: DemoModeRequest) -> DemoModeResponse:
+    """Update interceptor mode for local/demo walkthroughs."""
+    app_state = get_state()
+    if _is_production_like(app_state.config.environment):
+        raise HTTPException(
+            status_code=403,
+            detail="demo mode switching is disabled in production/staging",
+        )
+    if not app_state.accepts_interception:
+        raise HTTPException(status_code=503, detail="interceptor disabled for this runtime role")
+
+    app_state.interceptor.mode = DeploymentMode(req.mode)
+    return DemoModeResponse(
         interceptor_mode=app_state.interceptor.mode.value,
         environment=app_state.config.environment,
     )

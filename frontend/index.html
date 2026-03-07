@@ -1627,11 +1627,18 @@ function toggleModeMenu() {
   renderModeMenu();
 }
 
-function setMode(modeKey) {
-  state.mode = modeKey;
+async function setMode(modeKey) {
+  try {
+    const response = await apiRequest("POST", "/v1/demo/mode", { mode: modeKey });
+    state.mode = String(response?.interceptor_mode || modeKey).toLowerCase();
+    appendLog("ok", "Mode switched", `Deployment posture set to ${modeLabel(state.mode)}.`);
+    showToast("Deployment Mode Updated", `Current mode: ${modeLabel(state.mode)}`);
+  } catch (error) {
+    state.mode = modeKey;
+    appendLog("warn", "Mode sync fallback", `Backend mode update failed; using local view state. ${String(error)}`);
+    showToast("Deployment Mode Updated", `Current mode: ${modeLabel(state.mode)}`);
+  }
   state.modeMenuOpen = false;
-  appendLog("ok", "Mode switched", `Deployment posture set to ${modeLabel(modeKey)}.`);
-  showToast("Deployment Mode Updated", `Current mode: ${modeLabel(modeKey)}`);
   render();
 }
 
@@ -3415,7 +3422,7 @@ function handleAction(actionEl) {
       go(actionEl.dataset.page || "overview");
       return;
     case "set-mode":
-      setMode(actionEl.dataset.mode || "advisory");
+      void setMode(actionEl.dataset.mode || "advisory");
       return;
     case "select-team":
       state.selectedTeamId = actionEl.dataset.teamId || null;
