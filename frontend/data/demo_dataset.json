@@ -749,6 +749,26 @@
       "term": "TRAC",
       "aka": "Total Risk-Adjusted Cost",
       "definition": "Billed cost plus confidence risk premium, used to compare workloads with different attribution certainty."
+    },
+    {
+      "term": "Baseline Forecast",
+      "aka": "Forecast Scenario",
+      "definition": "Reference planning case that extends observed demand and current governance posture without assuming additional intervention capture."
+    },
+    {
+      "term": "Growth Push",
+      "aka": "Forecast Scenario",
+      "definition": "Upside demand case where product adoption, request volume, and model usage grow faster than the current observed trend."
+    },
+    {
+      "term": "Policy Hardened",
+      "aka": "Forecast Scenario",
+      "definition": "Control case where stronger allowlists, budget ceilings, and confidence floors constrain outlier spend and dampen growth."
+    },
+    {
+      "term": "Optimization Capture",
+      "aka": "Forecast Scenario",
+      "definition": "Execution case where approved routing, caching, and duplicate-request interventions convert into durable run-rate savings."
     }
   ],
   "faq": [
@@ -806,8 +826,87 @@
           "answer": "Governance controls are explicit and mode-aware, with fail-open behavior under fault conditions, bounded policy checks, and auditable lifecycle transitions for recommendations."
         }
       ]
+    },
+    {
+      "category": "Forecasting and Scenario Planning",
+      "items": [
+        {
+          "question": "What does the Baseline forecast assume?",
+          "answer": "Baseline is the reference case. It carries forward observed demand growth and current routing behavior without assuming that new governance controls or optimization work materially reduce spend."
+        },
+        {
+          "question": "What is the difference between Growth Push, Policy Hardened, and Optimization Capture?",
+          "answer": "Growth Push assumes adoption accelerates and monthly request volume expands faster than the current trend. Policy Hardened assumes stronger budget controls, allowlists, and confidence gates suppress outlier spend. Optimization Capture assumes approved interventions are implemented and produce durable run-rate savings."
+        },
+        {
+          "question": "How should an investor interpret these scenarios?",
+          "answer": "They are planning lenses, not opaque black-box outputs. Growth Push tests upside demand pressure, Policy Hardened tests governance discipline, and Optimization Capture tests whether the intervention pipeline can translate into realized savings."
+        }
+      ]
     }
   ],
+  "forecast_scenarios": {
+    "baseline": {
+      "label": "Baseline",
+      "summary": "Current trajectory with no incremental governance capture.",
+      "definition": "Reference case that carries forward observed demand growth, current routing patterns, and existing governance posture.",
+      "demand_shift_pct": 0.0,
+      "trend_ramp_pct": 0.0,
+      "governance_drag_pct": 0.0,
+      "capture_realization_pct": 0.0,
+      "volatility_band_pct": 7.0,
+      "assumptions": [
+        "Observed month-over-month demand growth continues without intervention-driven savings.",
+        "No additional policy tightening is assumed beyond current controls.",
+        "Previously identified savings remain unimplemented."
+      ]
+    },
+    "growth_push": {
+      "label": "Growth Push",
+      "summary": "Assumes accelerated adoption and elevated request growth.",
+      "definition": "Upside demand case where product rollouts, higher request volumes, and expanded model usage increase monthly spend faster than the current baseline.",
+      "demand_shift_pct": 3.5,
+      "trend_ramp_pct": 13.0,
+      "governance_drag_pct": 0.0,
+      "capture_realization_pct": 0.0,
+      "volatility_band_pct": 10.0,
+      "assumptions": [
+        "New product launches and broader internal adoption increase request volume above the observed trend.",
+        "Model mix stays broadly constant, so incremental demand lands directly on spend.",
+        "Governance posture remains unchanged."
+      ]
+    },
+    "policy_hardened": {
+      "label": "Policy Hardened",
+      "summary": "Assumes enforcement hardens and outlier spend is constrained.",
+      "definition": "Control scenario where stricter allowlists, budget ceilings, and confidence floors suppress outlier usage and reduce demand growth.",
+      "demand_shift_pct": -1.5,
+      "trend_ramp_pct": -6.0,
+      "governance_drag_pct": 7.5,
+      "capture_realization_pct": 0.2,
+      "volatility_band_pct": 5.5,
+      "assumptions": [
+        "Outlier usage is curtailed through stronger policy enforcement and budget gates.",
+        "Higher-confidence routing and entitlement checks reduce noisy non-production spend.",
+        "Only a modest portion of identified savings is assumed to convert into durable run-rate reduction."
+      ]
+    },
+    "optimization_capture": {
+      "label": "Optimization Capture",
+      "summary": "Assumes approved interventions are implemented and stick.",
+      "definition": "Execution scenario where approved routing, caching, and duplicate-request interventions convert into realized run-rate savings over the planning horizon.",
+      "demand_shift_pct": -2.5,
+      "trend_ramp_pct": -9.0,
+      "governance_drag_pct": 4.0,
+      "capture_realization_pct": 0.75,
+      "volatility_band_pct": 4.5,
+      "assumptions": [
+        "Approved interventions move into implementation and produce durable run-rate savings.",
+        "Duplicate requests, oversized model selection, and staging sprawl are actively reduced.",
+        "Savings compound gradually rather than appearing as a single one-time drop."
+      ]
+    }
+  },
   "demo_scenarios": {
     "enriched": {
       "label": "Scenario A: Enriched",
