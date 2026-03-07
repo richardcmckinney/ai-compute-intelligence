@@ -663,6 +663,137 @@ body {
   font-size: 11px;
 }
 
+.forecast-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.forecast-button-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.forecast-horizon-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 14px 0 12px;
+}
+
+.forecast-horizon-btn {
+  min-width: 48px;
+  justify-content: center;
+}
+
+.forecast-horizon-btn.active {
+  border-color: rgba(79, 142, 248, 0.45);
+  background: var(--blue-soft);
+  color: #9ec1ff;
+}
+
+.forecast-scenario-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.forecast-scenario-btn {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  padding: 14px;
+  cursor: pointer;
+  min-height: 112px;
+}
+
+.forecast-scenario-btn:hover {
+  border-color: rgba(79, 142, 248, 0.4);
+}
+
+.forecast-scenario-btn.active {
+  border-color: rgba(79, 142, 248, 0.5);
+  background: rgba(79, 142, 248, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(79, 142, 248, 0.15);
+}
+
+.forecast-scenario-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.forecast-scenario-subtitle {
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.forecast-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.95fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.forecast-detail-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 14px;
+}
+
+.forecast-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.forecast-metric {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #0d1522;
+  padding: 10px;
+}
+
+.forecast-metric-label {
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: 4px;
+}
+
+.forecast-metric-value {
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.forecast-bullets {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.forecast-bullets li + li {
+  margin-top: 6px;
+}
+
+@media (max-width: 980px) {
+  .forecast-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* Specific Components                                                        */
 /* -------------------------------------------------------------------------- */
@@ -721,72 +852,6 @@ body {
   display: inline-block;
 }
 
-.arch-diagram {
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: linear-gradient(180deg, #0a1220 0%, #0e1726 100%);
-  padding: 10px;
-}
-
-.req-selector {
-  display: grid;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.req-btn {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: transparent;
-  color: var(--text-dim);
-  text-align: left;
-  padding: 10px 12px;
-  cursor: pointer;
-}
-
-.req-btn.active {
-  border-color: rgba(79, 142, 248, 0.45);
-  background: var(--blue-soft);
-  color: #94bcff;
-}
-
-.req-id {
-  font-size: 11px;
-  font-weight: 650;
-  margin-bottom: 2px;
-}
-
-.chain-node {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface);
-  padding: 12px;
-  margin-bottom: 8px;
-}
-
-.chain-layer {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-}
-
-.chain-value {
-  font-size: 12px;
-  color: var(--text);
-  margin-top: 2px;
-}
-
-.chain-meta {
-  margin-top: 5px;
-  font-size: 11px;
-  color: var(--text-dim);
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
 .cost-row {
   display: flex;
   justify-content: space-between;
@@ -815,6 +880,221 @@ body {
   justify-content: center;
   font-size: 10px;
   font-weight: 700;
+}
+
+.diagnostics-intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.diagnostics-bullets {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.diagnostics-bullets li + li {
+  margin-top: 6px;
+}
+
+.request-sample-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.request-sample-btn {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-dim);
+  text-align: left;
+  padding: 12px;
+  cursor: pointer;
+}
+
+.request-sample-btn.active {
+  border-color: rgba(79, 142, 248, 0.45);
+  background: var(--blue-soft);
+  color: #94bcff;
+}
+
+.request-sample-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.request-sample-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.diagnostics-proof-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.diagnostics-proof-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 12px;
+}
+
+.diagnostics-proof-label {
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: 6px;
+}
+
+.diagnostics-proof-value {
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.diagnostics-proof-meta {
+  margin-top: 6px;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.diagnostics-step-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.diagnostics-step {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 14px;
+}
+
+.diagnostics-step-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--blue-soft);
+  color: #8fb8ff;
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.diagnostics-step-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 5px;
+}
+
+.diagnostics-step-body {
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.diagnostics-step-detail {
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.diagnostics-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  gap: 12px;
+}
+
+.evidence-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.evidence-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 12px;
+}
+
+.evidence-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 5px;
+}
+
+.evidence-value {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.evidence-meta {
+  margin-top: 6px;
+  color: var(--text-dim);
+  font-size: 11px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.diagnostics-panel {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 14px;
+}
+
+.diagnostics-panel + .diagnostics-panel {
+  margin-top: 12px;
+}
+
+.diagnostics-panel-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.diagnostics-panel-body {
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.diagnostics-panel-list {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.diagnostics-panel-list li + li {
+  margin-top: 6px;
 }
 
 .back-btn {
@@ -1070,6 +1350,74 @@ body {
   margin-bottom: 10px;
 }
 
+.drawer-purpose,
+.drawer-summary {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 12px;
+}
+
+.drawer-purpose {
+  margin-bottom: 12px;
+}
+
+.drawer-summary-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.drawer-summary-headline {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.drawer-summary-detail {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.drawer-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.drawer-summary-kpi {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #0d1522;
+  padding: 9px 10px;
+}
+
+.drawer-summary-kpi-label {
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: 4px;
+}
+
+.drawer-summary-kpi-value {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.drawer-why {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .log-item {
   border: 1px solid var(--border);
   border-radius: 9px;
@@ -1104,6 +1452,13 @@ body {
 .log-msg {
   font-size: 12px;
   color: var(--text);
+}
+
+.log-why {
+  margin-top: 6px;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .payload-block {
@@ -1158,6 +1513,20 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .diagnostics-proof-grid,
+  .diagnostics-step-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .diagnostics-intro,
+  .diagnostics-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .drawer-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .grid-8-4,
   .grid-7-5 {
     grid-template-columns: 1fr;
@@ -1177,6 +1546,16 @@ body {
     height: auto;
     padding: 12px;
     flex-wrap: wrap;
+  }
+
+  .diagnostics-proof-grid,
+  .diagnostics-step-grid,
+  .request-sample-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .drawer-summary-grid {
+    grid-template-columns: 1fr;
   }
 
   .topbar-right {
@@ -1234,7 +1613,7 @@ body {
           <span>Investor Demo Runtime</span>
         </div>
         <button class="top-btn" data-action="open-drawer">
-          Execution Stream
+          Guided Demo
           <span class="stream-count" id="stream-count">0</span>
         </button>
         <div class="avatar">NT</div>
@@ -1251,29 +1630,31 @@ body {
 <aside class="drawer" id="execution-drawer">
   <div class="drawer-header">
     <div>
-      <div class="drawer-title">Execution Stream</div>
-      <div class="drawer-subtitle">Collapsible technical panel for scenario runs, payloads, and responses.</div>
+      <div class="drawer-title">Guided Demo</div>
+      <div class="drawer-subtitle">Run three explainable scenarios and see what changed, why it matters, and what the platform proved.</div>
     </div>
     <button class="drawer-close" data-action="close-drawer">x</button>
   </div>
   <div class="drawer-body">
-    <div class="section-title">Quick Actions</div>
-    <div class="drawer-actions">
-      <button class="small-btn primary" data-action="bootstrap-demo">Bootstrap Demo Data</button>
-      <button class="small-btn success" data-action="run-sequence">Run Full Sequence</button>
-      <button class="small-btn" data-action="run-scenario" data-scenario="enriched">Run Enriched</button>
-      <button class="small-btn" data-action="run-scenario" data-scenario="soft_stop">Run Soft Stop</button>
-      <button class="small-btn" data-action="run-scenario" data-scenario="fail_open">Run Fail-Open</button>
-      <button class="small-btn" data-action="clear-logs">Clear</button>
+    <div class="drawer-purpose">
+      <div class="drawer-summary-title">What this panel is for</div>
+      <div class="drawer-summary-detail">This is the fastest way to demonstrate the product live: initialize the synthetic operating state, show an attributed request, show a policy intervention, and show fail-open safety. It is intentionally focused on business-relevant outcomes rather than raw request plumbing.</div>
     </div>
 
-    <div class="section-title">Latest Request Payload</div>
-    <pre class="payload-block" id="latest-payload">No payload sent yet.</pre>
+    <div class="section-title">Guided Actions</div>
+    <div class="drawer-actions">
+      <button class="small-btn primary" data-action="bootstrap-demo">Initialize Demo</button>
+      <button class="small-btn success" data-action="run-sequence">Run Guided Walkthrough</button>
+      <button class="small-btn" data-action="run-scenario" data-scenario="enriched">Show Attributed Request</button>
+      <button class="small-btn" data-action="run-scenario" data-scenario="soft_stop">Show Policy Intervention</button>
+      <button class="small-btn" data-action="run-scenario" data-scenario="fail_open">Show Fail-Open Safety</button>
+      <button class="small-btn" data-action="clear-logs">Reset Panel</button>
+    </div>
 
-    <div class="section-title" style="margin-top:12px">Latest Response Payload</div>
-    <pre class="payload-block" id="latest-response">No response received yet.</pre>
+    <div class="section-title">Latest Demonstrated Outcome</div>
+    <div id="drawer-summary"></div>
 
-    <div class="section-title" style="margin-top:12px">Log Stream</div>
+    <div class="section-title" style="margin-top:12px">Walkthrough Timeline</div>
     <div id="log-stream"></div>
   </div>
 </aside>
@@ -1289,7 +1670,7 @@ const NAV_ITEMS = [
     group: "Platform",
     items: [
       { key: "overview", label: "Overview", icon: "<path d='M3 12l9-9 9 9'/><path d='M9 21V9h6v12'/>", badge: null },
-      { key: "attribution", label: "Attribution", icon: "<circle cx='12' cy='6' r='3'/><circle cx='6' cy='18' r='3'/><circle cx='18' cy='18' r='3'/><path d='M10 8l-2 7M14 8l2 7M9 18h6'/>", badge: null },
+      { key: "attribution", label: "Technical Diagnostics", icon: "<circle cx='12' cy='6' r='3'/><circle cx='6' cy='18' r='3'/><circle cx='18' cy='18' r='3'/><path d='M10 8l-2 7M14 8l2 7M9 18h6'/>", badge: null },
       { key: "models", label: "Models", icon: "<rect x='3' y='3' width='18' height='18' rx='3'/><path d='M3 9h18M9 3v18'/>", badge: null },
       { key: "teams", label: "Teams", icon: "<path d='M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M23 21v-2a4 4 0 00-3-3.87'/><path d='M16 3.13a4 4 0 010 7.75'/>", badge: null },
       { key: "interventions", label: "Interventions", icon: "<path d='M13 2L3 14h8l-1 8 10-12h-8l1-8z'/>", badge: "0" },
@@ -1309,7 +1690,7 @@ const NAV_ITEMS = [
 
 const PAGE_TITLES = {
   overview: "Overview",
-  attribution: "Attribution Graph",
+  attribution: "Technical Diagnostics",
   models: "Model Intelligence",
   teams: "Teams",
   interventions: "Interventions",
@@ -1324,6 +1705,73 @@ const MODE_COLORS = {
   passive: { bg: "rgba(29,188,200,0.18)", color: "#60dde6" },
   advisory: { bg: "rgba(42,196,135,0.17)", color: "#73deb1" },
   active: { bg: "rgba(148,112,255,0.16)", color: "#b49bff" }
+};
+
+const DEFAULT_FORECAST_SCENARIO = "baseline";
+const DEFAULT_FORECAST_HORIZON = 12;
+const FORECAST_HORIZONS = [3, 6, 9, 12, 18, 24];
+
+const FALLBACK_FORECAST_SCENARIOS = {
+  baseline: {
+    label: "Baseline",
+    summary: "Current trajectory with no incremental governance capture.",
+    definition: "Reference case that carries forward observed demand growth, current routing patterns, and existing governance posture.",
+    demand_shift_pct: 0.0,
+    trend_ramp_pct: 0.0,
+    governance_drag_pct: 0.0,
+    capture_realization_pct: 0.0,
+    volatility_band_pct: 7.0,
+    assumptions: [
+      "Observed month-over-month demand growth continues without intervention-driven savings.",
+      "No additional policy tightening is assumed beyond current controls.",
+      "Previously identified savings remain unimplemented."
+    ]
+  },
+  growth_push: {
+    label: "Growth Push",
+    summary: "Assumes accelerated adoption and elevated request growth.",
+    definition: "Upside demand case where product rollouts, higher request volumes, and expanded model usage increase monthly spend faster than the current baseline.",
+    demand_shift_pct: 3.5,
+    trend_ramp_pct: 13.0,
+    governance_drag_pct: 0.0,
+    capture_realization_pct: 0.0,
+    volatility_band_pct: 10.0,
+    assumptions: [
+      "New product launches and broader internal adoption increase request volume above the observed trend.",
+      "Model mix stays broadly constant, so incremental demand lands directly on spend.",
+      "Governance posture remains unchanged."
+    ]
+  },
+  policy_hardened: {
+    label: "Policy Hardened",
+    summary: "Assumes enforcement hardens and outlier spend is constrained.",
+    definition: "Control scenario where stricter allowlists, budget ceilings, and confidence floors suppress outlier usage and reduce demand growth.",
+    demand_shift_pct: -1.5,
+    trend_ramp_pct: -6.0,
+    governance_drag_pct: 7.5,
+    capture_realization_pct: 0.2,
+    volatility_band_pct: 5.5,
+    assumptions: [
+      "Outlier usage is curtailed through stronger policy enforcement and budget gates.",
+      "Higher-confidence routing and entitlement checks reduce noisy non-production spend.",
+      "Only a modest portion of identified savings is assumed to convert into durable run-rate reduction."
+    ]
+  },
+  optimization_capture: {
+    label: "Optimization Capture",
+    summary: "Assumes approved interventions are implemented and stick.",
+    definition: "Execution scenario where approved routing, caching, and duplicate-request interventions convert into realized run-rate savings over the planning horizon.",
+    demand_shift_pct: -2.5,
+    trend_ramp_pct: -9.0,
+    governance_drag_pct: 4.0,
+    capture_realization_pct: 0.75,
+    volatility_band_pct: 4.5,
+    assumptions: [
+      "Approved interventions move into implementation and produce durable run-rate savings.",
+      "Duplicate requests, oversized model selection, and staging sprawl are actively reduced.",
+      "Savings compound gradually rather than appearing as a single one-time drop."
+    ]
+  }
 };
 
 const FALLBACK_DATASET = {
@@ -1346,7 +1794,8 @@ const FALLBACK_DATASET = {
   governance: { modes: [], policies: [], fail_open_matrix: [], trust_boundary_summary: [] },
   glossary: [],
   faq: [],
-  demo_scenarios: {}
+  demo_scenarios: {},
+  forecast_scenarios: FALLBACK_FORECAST_SCENARIOS
 };
 
 const state = {
@@ -1361,8 +1810,13 @@ const state = {
   logs: [],
   lastPayload: null,
   lastResponse: null,
+  demoOutcome: null,
   forecastResult: null,
   forecastStatus: "Forecast not generated yet.",
+  forecastScenarioKey: DEFAULT_FORECAST_SCENARIO,
+  forecastHorizonMonths: DEFAULT_FORECAST_HORIZON,
+  forecastDirty: false,
+  forecastLoading: false,
   integrationDeliveries: [],
   faqQuery: "",
   faqOpenKeys: new Set()
@@ -1572,7 +2026,7 @@ function hydrateInterventionStatuses() {
       }
     }
   } catch (error) {
-    appendLog("warn", "Session cache", `Could not load intervention state: ${String(error)}`);
+    appendLog("warn", "Session cache", `Could not load intervention state: ${String(error)}`, null, { hidden: true });
   }
 }
 
@@ -1600,23 +2054,83 @@ function showToast(title, message) {
   }, 2500);
 }
 
-function appendLog(level, title, message, payload) {
+function summarizeApiError(error, fallback = "The live demo action could not be completed.") {
+  const message = String(error || "");
+  if (message.includes("Failed to fetch") || message.includes("NetworkError")) {
+    return "Live demo API unavailable. Start the local demo runtime and retry.";
+  }
+  return fallback;
+}
+
+function visibleDrawerEntries() {
+  return state.logs.filter((entry) => !entry.hidden);
+}
+
+function setDemoOutcome(outcome) {
+  state.demoOutcome = outcome;
+}
+
+function interceptOutcomeLabel(outcome) {
+  const map = {
+    passthrough: "Allowed",
+    enriched: "Enriched",
+    soft_stopped: "Policy Warning",
+    hard_stopped: "Blocked",
+    redirected: "Redirected",
+    fail_open: "Fail-Open",
+    timeout: "Fail-Open",
+    circuit_open: "Fail-Open"
+  };
+  return map[String(outcome || "").toLowerCase()] || String(outcome || "Unknown");
+}
+
+function scenarioNarrative(kind) {
+  const map = {
+    enriched: {
+      title: "Attributed Request",
+      headline: "High-confidence attribution completed without adding friction.",
+      why: "This proves the platform can identify the accountable team and policy posture in the request path without interrupting a normal workload."
+    },
+    soft_stop: {
+      title: "Policy Intervention",
+      headline: "The request surfaced a governance warning before spend drifted further.",
+      why: "This shows governance can be applied as an explainable operating control instead of a black-box blocker."
+    },
+    fail_open: {
+      title: "Fail-Open Safety",
+      headline: "The workload continued even though attribution context was unavailable.",
+      why: "This shows the control plane does not become a production outage. Availability wins while the system records what happened."
+    }
+  };
+  return map[kind] || {
+    title: "Scenario",
+    headline: "Scenario executed.",
+    why: "This action demonstrates a live platform behavior."
+  };
+}
+
+function appendLog(level, title, message, payload, options = {}) {
   state.logs.unshift({
     level,
     title,
     message,
     payload,
-    at: nowLabel()
+    at: nowLabel(),
+    why: options.why || "",
+    hidden: Boolean(options.hidden)
   });
   state.logs = state.logs.slice(0, 80);
   renderDrawer();
+  renderTopbar();
 }
 
 function clearExecutionLogs() {
   state.logs = [];
   state.lastPayload = null;
   state.lastResponse = null;
+  state.demoOutcome = null;
   renderDrawer();
+  renderTopbar();
 }
 
 function setExecutionDrawer(open) {
@@ -1640,11 +2154,9 @@ async function setMode(modeKey) {
   try {
     const response = await apiRequest("POST", "/v1/demo/mode", { mode: modeKey });
     state.mode = String(response?.interceptor_mode || modeKey).toLowerCase();
-    appendLog("ok", "Mode switched", `Deployment posture set to ${modeLabel(state.mode)}.`);
     showToast("Deployment Mode Updated", `Current mode: ${modeLabel(state.mode)}`);
   } catch (error) {
     state.mode = modeKey;
-    appendLog("warn", "Mode sync fallback", `Backend mode update failed; using local view state. ${String(error)}`);
     showToast("Deployment Mode Updated", `Current mode: ${modeLabel(state.mode)}`);
   }
   state.modeMenuOpen = false;
@@ -1712,9 +2224,7 @@ async function syncInterventionsFromApi() {
     const payload = await apiRequest("GET", "/v1/interventions");
     applyInterventionApiRows(payload.interventions);
     persistInterventionStatuses();
-  } catch (error) {
-    appendLog("warn", "Interventions API", `Using dataset interventions: ${String(error)}`);
-  }
+  } catch {}
 }
 
 async function updateInterventionStatus(id, nextStatus) {
@@ -1731,15 +2241,12 @@ async function updateInterventionStatus(id, nextStatus) {
       note: "Updated via platform demo controls"
     });
     intervention.status = normalizeStatus(response.status);
-  } catch (error) {
+  } catch {
     intervention.status = normalized;
-    appendLog("warn", "Intervention API unavailable", `Applied local fallback state for ${id}.`);
-    appendLog("warn", "Intervention API detail", String(error));
   }
 
   persistInterventionStatuses();
   const statusText = intervention.status.replace("_", " ");
-  appendLog("ok", "Intervention update", `${id} moved to ${statusText}.`);
   showToast("Intervention Updated", `${id} set to ${statusText}.`);
   render();
 }
@@ -1830,32 +2337,55 @@ function renderTopbar() {
   }
   const streamCount = document.getElementById("stream-count");
   if (streamCount) {
-    streamCount.textContent = String(state.logs.length);
+    streamCount.textContent = String(visibleDrawerEntries().length);
   }
 }
 
 function renderDrawer() {
   const logRoot = document.getElementById("log-stream");
   if (logRoot) {
-    logRoot.innerHTML = state.logs.length
-      ? state.logs.map((entry) => {
+    const visibleEntries = visibleDrawerEntries();
+    logRoot.innerHTML = visibleEntries.length
+      ? visibleEntries.map((entry) => {
           return `
             <div class="log-item ${entry.level === "ok" ? "ok" : entry.level === "warn" ? "warn" : entry.level === "err" ? "err" : ""}">
               <div class="log-head"><span>${esc(entry.title)}</span><span>${esc(entry.at)}</span></div>
               <div class="log-msg">${esc(entry.message)}</div>
+              ${entry.why ? `<div class="log-why">${esc(entry.why)}</div>` : ""}
             </div>
           `;
         }).join("")
-      : `<div class="hint">No execution events yet. Run a scenario to populate the stream.</div>`;
+      : `<div class="hint">No walkthrough steps have been run yet. Initialize the demo, then run one of the guided scenarios.</div>`;
   }
 
-  const payloadEl = document.getElementById("latest-payload");
-  if (payloadEl) {
-    payloadEl.textContent = state.lastPayload ? JSON.stringify(state.lastPayload, null, 2) : "No payload sent yet.";
-  }
-  const responseEl = document.getElementById("latest-response");
-  if (responseEl) {
-    responseEl.textContent = state.lastResponse ? JSON.stringify(state.lastResponse, null, 2) : "No response received yet.";
+  const summaryEl = document.getElementById("drawer-summary");
+  if (summaryEl) {
+    if (!state.demoOutcome) {
+      summaryEl.innerHTML = `
+        <div class="drawer-summary">
+          <div class="drawer-summary-title">Latest Demonstrated Outcome</div>
+          <div class="drawer-summary-headline">No live proof point selected yet.</div>
+          <div class="drawer-summary-detail">Use <strong>Initialize Demo</strong>, then run <strong>Show Attributed Request</strong>, <strong>Show Policy Intervention</strong>, or <strong>Show Fail-Open Safety</strong>. This panel will translate the result into plain-language product evidence.</div>
+        </div>
+      `;
+    } else {
+      summaryEl.innerHTML = `
+        <div class="drawer-summary">
+          <div class="drawer-summary-title">${esc(state.demoOutcome.title)}</div>
+          <div class="drawer-summary-headline">${esc(state.demoOutcome.headline)}</div>
+          <div class="drawer-summary-detail">${esc(state.demoOutcome.detail)}</div>
+          <div class="drawer-summary-grid">
+            ${(state.demoOutcome.metrics || []).map((metric) => `
+              <div class="drawer-summary-kpi">
+                <div class="drawer-summary-kpi-label">${esc(metric.label)}</div>
+                <div class="drawer-summary-kpi-value">${esc(metric.value)}</div>
+              </div>
+            `).join("")}
+          </div>
+          <div class="drawer-why"><strong>Why it matters:</strong> ${esc(state.demoOutcome.why)}</div>
+        </div>
+      `;
+    }
   }
 
   setExecutionDrawer(state.executionDrawerOpen);
@@ -1905,10 +2435,10 @@ function overviewView() {
       <div class="mode-banner">
         <div>
           <div class="pill" style="background:${modeColor.bg};color:${modeColor.color}">${esc(modeLabel(state.mode))}</div>
-          <div class="hint" style="margin-top:6px">Financial summaries are kept separate from technical request-level inspection. Open the execution drawer for request stream details.</div>
+          <div class="hint" style="margin-top:6px">Financial summaries are kept separate from the guided walkthrough panel. Open the guided demo to show a live attributed request, policy intervention, or fail-open safety path.</div>
         </div>
         <div class="mode-banner-right">
-          <button class="small-btn" data-action="open-drawer">Open Execution Stream</button>
+          <button class="small-btn" data-action="open-drawer">Open Guided Demo</button>
           <button class="small-btn" data-action="go" data-page="faq">Methodology FAQ</button>
         </div>
       </div>
@@ -2021,7 +2551,7 @@ function overviewView() {
     <div class="overview-zone">
       <div class="section-title">Zone 3: Technical Detail Location</div>
       <div class="card">
-        <div class="hint">Request-level traces, attribution-chain evidence, and execution stream logs are intentionally moved out of this executive overview. Use <button class="link-btn" data-action="go" data-page="attribution">Attribution</button> and <button class="link-btn" data-action="open-drawer">Execution Stream</button>.</div>
+        <div class="hint">Request-level traces and the guided walkthrough are intentionally moved out of this executive overview. Use <button class="link-btn" data-action="go" data-page="attribution">Technical Diagnostics</button> and <button class="link-btn" data-action="open-drawer">Guided Demo</button>.</div>
       </div>
     </div>
   `;
@@ -2154,158 +2684,242 @@ function renderOverviewCharts() {
   });
 }
 
-function architectureDiagram() {
-  return `
-    <svg class="arch-diagram" viewBox="0 0 980 300" role="img" aria-label="ACI architecture and bi-directional data flows">
-      <defs>
-        <marker id="arrowSolid" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
-          <path d="M0,0 L0,6 L9,3 z" fill="#6ca7ff" />
-        </marker>
-        <marker id="arrowDashed" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
-          <path d="M0,0 L0,6 L9,3 z" fill="#f0bc61" />
-        </marker>
-      </defs>
+function chainNode(request, layerName) {
+  return (request?.chain || []).find((node) => String(node.layer || "").toLowerCase() === layerName.toLowerCase()) || null;
+}
 
-      <rect x="30" y="85" width="170" height="70" rx="12" fill="#101b2a" stroke="#274062" />
-      <text x="115" y="113" text-anchor="middle" fill="#d9e6fb" font-size="14" font-family="Space Grotesk">Event Ingestion</text>
-      <text x="115" y="133" text-anchor="middle" fill="#8ea0bf" font-size="11" font-family="Space Grotesk">Cloud, CI/CD, Identity, SCM</text>
+function confidenceBandLabel(confidence) {
+  const conf = Number(confidence || 0);
+  if (conf >= 0.9) {
+    return "High confidence";
+  }
+  if (conf >= 0.8) {
+    return "Medium confidence";
+  }
+  return "Needs review";
+}
 
-      <rect x="250" y="45" width="180" height="70" rx="12" fill="#101b2a" stroke="#274062" />
-      <text x="340" y="72" text-anchor="middle" fill="#d9e6fb" font-size="14" font-family="Space Grotesk">HRE + Graph Store</text>
-      <text x="340" y="92" text-anchor="middle" fill="#8ea0bf" font-size="11" font-family="Space Grotesk">R1-R6 reconciliation</text>
+function confidenceWhy(confidence) {
+  const conf = Number(confidence || 0);
+  if (conf >= 0.9) {
+    return "Multiple deterministic signals agree on the owner and budget path.";
+  }
+  if (conf >= 0.8) {
+    return "Core ownership signals align, but one or more joins are probabilistic.";
+  }
+  return "At least one critical ownership hop is probabilistic enough that a human should confirm it.";
+}
 
-      <rect x="250" y="180" width="180" height="70" rx="12" fill="#101b2a" stroke="#274062" />
-      <text x="340" y="207" text-anchor="middle" fill="#d9e6fb" font-size="14" font-family="Space Grotesk">Attribution Index</text>
-      <text x="340" y="227" text-anchor="middle" fill="#8ea0bf" font-size="11" font-family="Space Grotesk">Low-latency serving cache</text>
-
-      <rect x="500" y="85" width="180" height="70" rx="12" fill="#101b2a" stroke="#274062" />
-      <text x="590" y="113" text-anchor="middle" fill="#d9e6fb" font-size="14" font-family="Space Grotesk">Interceptor Gateway</text>
-      <text x="590" y="133" text-anchor="middle" fill="#8ea0bf" font-size="11" font-family="Space Grotesk">Fail-open, O(1) lookup</text>
-
-      <rect x="740" y="45" width="200" height="70" rx="12" fill="#101b2a" stroke="#274062" />
-      <text x="840" y="72" text-anchor="middle" fill="#d9e6fb" font-size="14" font-family="Space Grotesk">Policy Engine</text>
-      <text x="840" y="92" text-anchor="middle" fill="#8ea0bf" font-size="11" font-family="Space Grotesk">Allowlist, ceilings, confidence floor</text>
-
-      <rect x="740" y="180" width="200" height="70" rx="12" fill="#101b2a" stroke="#274062" />
-      <text x="840" y="207" text-anchor="middle" fill="#d9e6fb" font-size="14" font-family="Space Grotesk">Control Plane UI</text>
-      <text x="840" y="227" text-anchor="middle" fill="#8ea0bf" font-size="11" font-family="Space Grotesk">Overview, interventions, audit</text>
-
-      <path d="M200 120 L250 80" stroke="#6ca7ff" stroke-width="2.3" marker-end="url(#arrowSolid)" fill="none"/>
-      <path d="M250 100 L200 140" stroke="#f0bc61" stroke-width="2" stroke-dasharray="7 6" marker-end="url(#arrowDashed)" fill="none"/>
-      <text x="218" y="86" fill="#7eaef9" font-size="10">events</text>
-      <text x="204" y="158" fill="#f0bc61" font-size="10">schema errors, replay hints</text>
-
-      <path d="M340 115 L340 180" stroke="#6ca7ff" stroke-width="2.3" marker-end="url(#arrowSolid)" fill="none"/>
-      <path d="M360 180 L360 115" stroke="#f0bc61" stroke-width="2" stroke-dasharray="7 6" marker-end="url(#arrowDashed)" fill="none"/>
-      <text x="366" y="150" fill="#7eaef9" font-size="10">materialized keys</text>
-
-      <path d="M430 210 L500 130" stroke="#6ca7ff" stroke-width="2.3" marker-end="url(#arrowSolid)" fill="none"/>
-      <path d="M500 145 L430 225" stroke="#f0bc61" stroke-width="2" stroke-dasharray="7 6" marker-end="url(#arrowDashed)" fill="none"/>
-      <text x="447" y="164" fill="#7eaef9" font-size="10">index lookup</text>
-      <text x="430" y="241" fill="#f0bc61" font-size="10">shadow warming</text>
-
-      <path d="M680 115 L740 80" stroke="#6ca7ff" stroke-width="2.3" marker-end="url(#arrowSolid)" fill="none"/>
-      <path d="M740 102 L680 137" stroke="#f0bc61" stroke-width="2" stroke-dasharray="7 6" marker-end="url(#arrowDashed)" fill="none"/>
-      <text x="699" y="83" fill="#7eaef9" font-size="10">policy eval</text>
-      <text x="677" y="152" fill="#f0bc61" font-size="10">decision telemetry</text>
-
-      <path d="M680 137 L740 215" stroke="#6ca7ff" stroke-width="2.3" marker-end="url(#arrowSolid)" fill="none"/>
-      <path d="M740 198 L680 120" stroke="#f0bc61" stroke-width="2" stroke-dasharray="7 6" marker-end="url(#arrowDashed)" fill="none"/>
-      <text x="708" y="194" fill="#7eaef9" font-size="10">audit events</text>
-      <text x="687" y="115" fill="#f0bc61" font-size="10">operator controls</text>
-
-      <text x="34" y="22" fill="#8ea0bf" font-size="12" font-family="Space Grotesk">Solid arrows: primary flow | Dashed arrows: feedback / control loop</text>
-    </svg>
-  `;
+function optimizationNarrative(request) {
+  const alt = String(request?.enrichment?.alternate_model || "");
+  if (!alt) {
+    return "No optimization signal was attached to this request.";
+  }
+  if (alt.toLowerCase().includes("already on lowest-cost")) {
+    return "This request is already on the lowest-cost verified model, so the platform recommends no routing change.";
+  }
+  if (alt.toLowerCase().includes("no verified equivalent")) {
+    return "The platform did not find a verified lower-cost equivalent for this workload, so it preserves the current route.";
+  }
+  return `The platform found a lower-cost verified alternative: ${alt}.`;
 }
 
 function attributionView() {
   const requests = dataset.attribution_requests || [];
   const selected = requests.find((item) => item.id === state.selectedRequestId) || requests[0];
-  const reqButtons = requests.map((req) => {
-    const active = selected && selected.id === req.id;
+  if (!selected) {
     return `
-      <button class="req-btn${active ? " active" : ""}" data-action="select-request" data-request-id="${esc(req.id)}">
-        <div class="req-id mono">${esc(req.id)}</div>
-        <div class="hint">${esc(req.model)} | ${fmtUSD(req.cost_usd, 4)} | conf ${Number(req.confidence || 0).toFixed(2)}</div>
+      <div class="card">
+        <div class="card-title">Technical Diagnostics</div>
+        <div class="hint" style="margin-top:8px">No request diagnostics are available in the demo dataset.</div>
+      </div>
+    `;
+  }
+
+  const modelNode = chainNode(selected, "Model Invocation");
+  const serviceNode = chainNode(selected, "Service Attribution");
+  const codeNode = chainNode(selected, "Code Ownership");
+  const identityNode = chainNode(selected, "Identity Resolution");
+  const teamNode = chainNode(selected, "Org Hierarchy");
+  const budgetNode = chainNode(selected, "Budget Attribution");
+  const confidencePct = Number(selected.confidence || 0) * 100;
+  const billed = Number(selected.cost_breakdown?.billed_cost_usd || 0);
+  const risk = Number(selected.cost_breakdown?.confidence_risk_premium_usd || 0);
+  const total = billed + risk;
+  const tracTotal = Number(selected.trac_usd || selected.cost_breakdown?.total_usd || 0);
+  const tracWidthBase = total > 0 ? Math.max((billed / total) * 100, 10) : 50;
+  const tracWidthRisk = total > 0 ? Math.max((risk / total) * 100, 10) : 50;
+  const alternateModel = String(selected.enrichment?.alternate_model || "");
+  const decisionHeadline = confidencePct >= 90
+    ? "The platform can attribute this request confidently enough to use it in governance and chargeback views."
+    : "The platform can place this request, but it still signals that a human should verify the weaker joins.";
+
+  const requestButtons = requests.map((req) => {
+    const reqTeam = chainNode(req, "Org Hierarchy");
+    const reqService = chainNode(req, "Service Attribution");
+    const active = selected.id === req.id;
+    return `
+      <button class="request-sample-btn${active ? " active" : ""}" data-action="select-request" data-request-id="${esc(req.id)}">
+        <div class="request-sample-title">${esc(reqService?.value || req.id)}</div>
+        <div class="request-sample-meta">${esc(req.model)} | ${fmtUSD(req.cost_usd, 4)} | ${esc(reqTeam?.value || "Unassigned")} | ${Math.round(Number(req.confidence || 0) * 100)}% confidence</div>
       </button>
     `;
   }).join("");
 
-  const chainRows = selected
-    ? (selected.chain || []).map((node) => {
-        return `
-          <div class="chain-node">
-            <div class="chain-layer">${esc(node.layer)}</div>
-            <div class="chain-value mono">${esc(node.value)}</div>
-            <div class="chain-meta">
-              <span>Source: ${esc(node.source)}</span>
-              <span>Method: ${esc(node.method)}</span>
-              <span>Conf: ${Number(node.confidence || 0).toFixed(2)}</span>
-            </div>
-          </div>
-        `;
-      }).join("")
-    : `<div class="hint">No attribution samples available.</div>`;
-
-  let tracWidthBase = 50;
-  let tracWidthRisk = 50;
-  if (selected) {
-    const billed = Number(selected.cost_breakdown?.billed_cost_usd || 0);
-    const risk = Number(selected.cost_breakdown?.confidence_risk_premium_usd || 0);
-    const total = billed + risk;
-    if (total > 0) {
-      tracWidthBase = Math.max((billed / total) * 100, 10);
-      tracWidthRisk = Math.max((risk / total) * 100, 10);
+  const stepCards = [
+    {
+      step: "1",
+      title: "Runtime signal captured",
+      body: `${modelNode?.value || selected.model} was observed on ${serviceNode?.value || "the service path"} at ${esc(selected.time)}.`,
+      detail: `Input ${fmtNumber(selected.input_tokens)} tokens | Output ${fmtNumber(selected.output_tokens)} tokens | ${fmtNumber(selected.latency_ms)} ms latency`
+    },
+    {
+      step: "2",
+      title: "Owner resolved",
+      body: `${codeNode?.value || "Code ownership"} and ${identityNode?.value || "identity joins"} resolve to ${teamNode?.value || "an accountable team"}.`,
+      detail: `${esc(codeNode?.source || "")} | ${esc(identityNode?.source || "")}`
+    },
+    {
+      step: "3",
+      title: "Budget assigned",
+      body: `${budgetNode?.value || "Budget mapping unavailable"} receives the request cost at ${Math.round(confidencePct)}% confidence.`,
+      detail: confidenceWhy(selected.confidence)
+    },
+    {
+      step: "4",
+      title: "Decision returned",
+      body: `${modeLabel(String(selected.mode || state.mode).toLowerCase())} mode returned guidance without blocking the request.`,
+      detail: optimizationNarrative(selected)
     }
-  }
+  ].map((item) => {
+    return `
+      <div class="diagnostics-step">
+        <div class="diagnostics-step-num">${item.step}</div>
+        <div class="diagnostics-step-title">${esc(item.title)}</div>
+        <div class="diagnostics-step-body">${esc(item.body)}</div>
+        <div class="diagnostics-step-detail">${esc(item.detail)}</div>
+      </div>
+    `;
+  }).join("");
+
+  const evidenceCards = (selected.chain || []).map((node) => {
+    return `
+      <div class="evidence-card">
+        <div class="evidence-title">${esc(node.layer)}</div>
+        <div class="evidence-value mono">${esc(node.value)}</div>
+        <div class="evidence-meta">
+          <span>Source: ${esc(node.source)}</span>
+          <span>Method: ${esc(node.method)}</span>
+          <span>Confidence: ${Math.round(Number(node.confidence || 0) * 100)}%</span>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  const gatewaySignals = [
+    `Estimated request cost: ${fmtUSD(selected.cost_usd, 4)}`,
+    `Confidence attached to the request: ${Math.round(confidencePct)}%`,
+    alternateModel ? `Optimization signal: ${alternateModel}` : "Optimization signal: none attached",
+    confidencePct < 80 ? "Operator implication: this request should be reviewed before being used for automated chargeback." : "Operator implication: this request is strong enough for automated governance views."
+  ];
 
   return `
-    <div class="card" style="margin-bottom:12px">
-      <div class="card-header">
-        <div>
-          <div class="card-title">Architecture and Data Flow</div>
-          <div class="card-subtitle">Bi-directional request, control, and telemetry paths across core components</div>
+    <div class="diagnostics-intro">
+      <div class="card">
+        <div class="card-title">Technical Diagnostics</div>
+        <div class="card-subtitle">This page answers one diligence question: for a single request, what did the platform know, what decision did it produce, and why should anyone trust it?</div>
+        <ul class="diagnostics-bullets">
+          <li>It starts from a real runtime request, not a static cost report.</li>
+          <li>It shows how ownership is resolved from service, code, identity, org, and budget evidence.</li>
+          <li>It explains the output in plain language rather than raw headers or implementation jargon.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-title">How To Read This Page</div>
+        <div class="card-subtitle">Pick one request sample, then read left to right.</div>
+        <ul class="diagnostics-bullets">
+          <li><strong>Top row:</strong> what the platform concluded.</li>
+          <li><strong>Middle row:</strong> how it reached that conclusion.</li>
+          <li><strong>Bottom panels:</strong> the evidence used and the decision returned.</li>
+        </ul>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="small-btn" data-action="open-drawer">Open Guided Demo</button>
+          <button class="small-btn" data-action="go" data-page="faq">Methodology FAQ</button>
         </div>
       </div>
-      ${architectureDiagram()}
     </div>
 
-    <div class="grid grid-7-5">
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <div class="card-title">Six-Layer Attribution Chain</div>
-            <div class="card-subtitle">Request-level evidence path from model invocation to budget owner</div>
-          </div>
-          <button class="small-btn" data-action="open-drawer">Open Stream</button>
+    <div class="request-sample-grid">${requestButtons}</div>
+
+    <div class="diagnostics-proof-grid">
+      <div class="diagnostics-proof-card">
+        <div class="diagnostics-proof-label">Accountable Team</div>
+        <div class="diagnostics-proof-value">${esc(teamNode?.value || "Unresolved")}</div>
+        <div class="diagnostics-proof-meta">${esc(identityNode?.value || "No identity join")} | ${esc(serviceNode?.value || "No service join")}</div>
+      </div>
+      <div class="diagnostics-proof-card">
+        <div class="diagnostics-proof-label">Budget Owner</div>
+        <div class="diagnostics-proof-value">${esc(budgetNode?.value || "Unresolved")}</div>
+        <div class="diagnostics-proof-meta">${esc(codeNode?.value || "No code ownership evidence")}</div>
+      </div>
+      <div class="diagnostics-proof-card">
+        <div class="diagnostics-proof-label">Confidence</div>
+        <div class="diagnostics-proof-value">${Math.round(confidencePct)}%</div>
+        <div class="diagnostics-proof-meta">${esc(confidenceBandLabel(selected.confidence))} | ${esc(confidenceWhy(selected.confidence))}</div>
+      </div>
+      <div class="diagnostics-proof-card">
+        <div class="diagnostics-proof-label">Decision-Time Cost</div>
+        <div class="diagnostics-proof-value">${fmtUSD(selected.cost_usd, 4)}</div>
+        <div class="diagnostics-proof-meta">${fmtNumber(selected.latency_ms)} ms latency | ${modeLabel(String(selected.mode || state.mode).toLowerCase())} mode</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-title">What the platform proved for this request</div>
+      <div class="card-subtitle">${esc(decisionHeadline)}</div>
+      <div class="diagnostics-step-grid" style="margin-top:12px">${stepCards}</div>
+    </div>
+
+    <div class="diagnostics-detail-grid">
+      <div>
+        <div class="card">
+          <div class="card-title">Evidence Used</div>
+          <div class="card-subtitle">Every ownership hop is backed by a concrete source and a confidence score.</div>
+          <div class="evidence-grid" style="margin-top:12px">${evidenceCards}</div>
         </div>
-        <div class="req-selector">${reqButtons}</div>
-        ${chainRows}
       </div>
 
-      <div class="card">
-        <div class="card-title">Request Cost Explanation</div>
-        ${selected ? `
-          <div class="hint" style="margin:8px 0 10px">TRAC is computed as billed cost plus confidence risk premium.</div>
+      <div>
+        <div class="diagnostics-panel">
+          <div class="diagnostics-panel-title">Decision Summary</div>
+          <div class="diagnostics-panel-body">This request was priced at billed cost plus a confidence risk premium. The risk premium is small when the ownership chain is strong and larger when attribution is still probabilistic.</div>
           <div class="cost-row"><span>Request ID</span><span class="mono">${esc(selected.id)}</span></div>
-          <div class="cost-row"><span>Model</span><span>${esc(selected.model)}</span></div>
-          <div class="cost-row"><span>Latency</span><span>${fmtNumber(selected.latency_ms)} ms</span></div>
-          <div class="cost-row"><span>Billed Cost</span><span>${fmtUSD(selected.cost_breakdown?.billed_cost_usd || 0, 4)}</span></div>
-          <div class="cost-row"><span>Confidence Risk Premium</span><span>${fmtUSD(selected.cost_breakdown?.confidence_risk_premium_usd || 0, 4)}</span></div>
-          <div class="cost-row"><span><strong>TRAC</strong></span><span><strong>${fmtUSD(selected.trac_usd || selected.cost_breakdown?.total_usd || 0, 4)}</strong></span></div>
-
+          <div class="cost-row"><span>Billed Cost</span><span>${fmtUSD(billed, 4)}</span></div>
+          <div class="cost-row"><span>Confidence Risk Premium</span><span>${fmtUSD(risk, 4)}</span></div>
+          <div class="cost-row"><span><strong>TRAC</strong></span><span><strong>${fmtUSD(tracTotal, 4)}</strong></span></div>
           <div class="trac-bar">
             <div class="trac-segment" style="width:${tracWidthBase.toFixed(1)}%;background:var(--blue)">Billed</div>
             <div class="trac-segment" style="width:${tracWidthRisk.toFixed(1)}%;background:var(--amber)">Risk Premium</div>
           </div>
+        </div>
 
-          <div class="card" style="padding:10px;margin-top:12px;background:var(--surface)">
-            <div class="section-title">Advisory Headers</div>
-            <div class="mono" style="font-size:11px;color:var(--text-dim)">${esc(selected.enrichment?.headers || "")}</div>
-            <div class="hint" style="margin-top:7px">Alternative: ${esc(selected.enrichment?.alternate_model || "N/A")}</div>
-          </div>
-        ` : `<div class="hint" style="margin-top:8px">No sample selected.</div>`}
+        <div class="diagnostics-panel">
+          <div class="diagnostics-panel-title">What Downstream Systems Learn</div>
+          <div class="diagnostics-panel-body">The gateway does not need a raw evidence dump. It only needs the governed result.</div>
+          <ul class="diagnostics-panel-list">
+            ${gatewaySignals.map((item) => `<li>${esc(item)}</li>`).join("")}
+          </ul>
+        </div>
+
+        <div class="diagnostics-panel">
+          <div class="diagnostics-panel-title">Why this is safe to deploy</div>
+          <ul class="diagnostics-panel-list">
+            <li>Decision-time work stays bounded to a low-latency request path.</li>
+            <li>If attribution context is unavailable, the platform fails open instead of blocking production traffic.</li>
+            <li>Lower-confidence requests remain visible, but they can be held out of automated financial workflows until confidence improves.</li>
+          </ul>
+        </div>
       </div>
     </div>
   `;
@@ -2859,37 +3473,188 @@ function governanceView() {
   `;
 }
 
+function forecastScenarioLibrary() {
+  if (dataset.forecast_scenarios && Object.keys(dataset.forecast_scenarios).length) {
+    return dataset.forecast_scenarios;
+  }
+  return FALLBACK_FORECAST_SCENARIOS;
+}
+
+function getForecastScenario(key = state.forecastScenarioKey) {
+  const scenarios = forecastScenarioLibrary();
+  return scenarios[key] || scenarios[DEFAULT_FORECAST_SCENARIO] || Object.values(scenarios)[0];
+}
+
+function signedPct(value, digits = 1) {
+  const num = Number(value || 0);
+  return `${num >= 0 ? "+" : ""}${num.toFixed(digits)}%`;
+}
+
+function buildForecastInputSeries(scenarioKey = state.forecastScenarioKey) {
+  const scenario = getForecastScenario(scenarioKey);
+  const trend = dataset.overview?.spend_trend_k_usd || [];
+  const divisor = Math.max(trend.length - 1, 1);
+  return trend.map((item, idx) => {
+    const totalUsd = Number(item.total || 0) * 1000;
+    const capturedUsd = Number(item.captured || 0) * 1000;
+    const progress = trend.length <= 1 ? 1 : idx / divisor;
+    const demandLift = totalUsd * (Number(scenario.demand_shift_pct || 0) / 100);
+    const trendLift = totalUsd * (Number(scenario.trend_ramp_pct || 0) / 100) * progress;
+    const governanceDrag = totalUsd * (Number(scenario.governance_drag_pct || 0) / 100) * (0.35 + (progress * 0.65));
+    const captureCredit = capturedUsd * Number(scenario.capture_realization_pct || 0);
+    const adjusted = totalUsd + demandLift + trendLift - governanceDrag - captureCredit;
+    return Math.max(Math.round(adjusted), Math.round(totalUsd * 0.45));
+  });
+}
+
+function forecastProjectionLabels(points) {
+  const trend = dataset.overview?.spend_trend_k_usd || [];
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const lastMonth = trend.length ? String(trend[trend.length - 1].month || "Jan") : "Jan";
+  const startIndex = Math.max(monthNames.indexOf(lastMonth), 0);
+  return points.map((_, idx) => monthNames[(startIndex + idx + 1) % monthNames.length]);
+}
+
+function markForecastDirty() {
+  const scenario = getForecastScenario();
+  state.forecastDirty = true;
+  state.forecastStatus = `${scenario.label} selected for ${state.forecastHorizonMonths} months. Generate a fresh projection to update the plan.`;
+}
+
+async function resetForecastPlanner(options = {}) {
+  const { log = false, toast = false } = options;
+  state.forecastScenarioKey = DEFAULT_FORECAST_SCENARIO;
+  state.forecastHorizonMonths = DEFAULT_FORECAST_HORIZON;
+  state.forecastDirty = false;
+  await runForecastDemo({
+    log,
+    toast,
+    statusOverride: "Forecast reset to baseline 12-month view."
+  });
+}
+
 function forecastView() {
   const trend = dataset.overview?.spend_trend_k_usd || [];
+  const scenario = getForecastScenario();
   const points = state.forecastResult?.points || [];
+  const adjustedSeries = buildForecastInputSeries();
+  const latestActual = trend.length ? Number(trend[trend.length - 1].total || 0) * 1000 : 0;
+  const finalPoint = points.length ? points[points.length - 1] : null;
+  const projectedDeltaPct = finalPoint && latestActual > 0
+    ? ((Number(finalPoint.predicted_spend_usd || 0) / latestActual) - 1) * 100
+    : 0;
+  const scenarioDeltaPct = trend.length && adjustedSeries.length && latestActual > 0
+    ? ((adjustedSeries[adjustedSeries.length - 1] / latestActual) - 1) * 100
+    : 0;
+
+  const horizonButtons = FORECAST_HORIZONS.map((months) => {
+    const active = state.forecastHorizonMonths === months;
+    return `<button class="small-btn forecast-horizon-btn${active ? " active" : ""}" data-action="forecast-set-horizon" data-months="${months}" ${state.forecastLoading ? "disabled" : ""}>${months}m</button>`;
+  }).join("");
+
+  const scenarioButtons = Object.entries(forecastScenarioLibrary()).map(([key, item]) => {
+    const active = state.forecastScenarioKey === key;
+    return `
+      <button class="forecast-scenario-btn${active ? " active" : ""}" data-action="forecast-set-scenario" data-scenario-key="${esc(key)}" ${state.forecastLoading ? "disabled" : ""}>
+        <div class="forecast-scenario-title">${esc(item.label)}</div>
+        <div class="forecast-scenario-subtitle">${esc(item.summary || item.definition || "")}</div>
+      </button>
+    `;
+  }).join("");
+
+  const projectionLabels = forecastProjectionLabels(points);
   const estimateCards = points.length
-    ? points.map((point) => {
-        return `<div class="card" style="padding:10px;background:var(--surface)"><div class="metric-label">Month +${point.month_offset}</div><div style="font-size:18px;font-weight:650">${fmtUSD(point.predicted_spend_usd)}</div><div class="hint">Range ${fmtUSD(point.lower_bound_usd)} - ${fmtUSD(point.upper_bound_usd)}</div></div>`;
+    ? points.map((point, idx) => {
+        return `
+          <div class="card" style="padding:10px;background:var(--surface)">
+            <div class="metric-label">${esc(projectionLabels[idx] || `Month +${point.month_offset}`)}</div>
+            <div style="font-size:18px;font-weight:650">${fmtUSD(point.predicted_spend_usd)}</div>
+            <div class="hint">Range ${fmtUSD(point.lower_bound_usd)} - ${fmtUSD(point.upper_bound_usd)}</div>
+          </div>
+        `;
       }).join("")
     : `<div class="hint">Generate a forecast to populate projection points.</div>`;
 
   return `
     <div class="card" style="margin-bottom:12px">
-      <div class="card-header">
+      <div class="forecast-toolbar">
         <div>
           <div class="card-title">Cost Forecasting</div>
-          <div class="card-subtitle">Predict forward spend trajectory from recent monthly observations.</div>
+          <div class="card-subtitle">Scenario-based forecasting across 3, 6, 9, 12, 18, and 24 month planning horizons.</div>
         </div>
-        <div style="display:flex;gap:6px">
-          <button class="small-btn primary" data-action="forecast-generate">Generate Live Forecast</button>
-          <button class="small-btn" data-action="forecast-reset">Reset</button>
+        <div class="forecast-button-row">
+          <button class="small-btn primary" data-action="forecast-generate" ${state.forecastLoading ? "disabled" : ""}>${state.forecastLoading ? "Generating..." : "Generate Live Forecast"}</button>
+          <button class="small-btn" data-action="forecast-reset" ${state.forecastLoading ? "disabled" : ""}>Reset</button>
+          <button class="small-btn" data-action="go" data-page="glossary">Glossary</button>
+          <button class="small-btn" data-action="go" data-page="faq">FAQ</button>
         </div>
       </div>
+
+      <div class="forecast-horizon-row">${horizonButtons}</div>
+      <div class="forecast-scenario-grid">${scenarioButtons}</div>
       <div class="hint">${esc(state.forecastStatus)}</div>
-      <div style="height:290px;margin-top:10px"><canvas id="chart-forecast"></canvas></div>
+
+      <div class="forecast-detail-grid">
+        <div class="forecast-detail-card">
+          <div class="card-title" style="font-size:14px">What ${esc(scenario.label)} Means</div>
+          <div class="hint" style="margin-top:6px">${esc(scenario.definition || scenario.summary || "")}</div>
+          <div class="forecast-metric-grid">
+            <div class="forecast-metric">
+              <div class="forecast-metric-label">Demand Shift</div>
+              <div class="forecast-metric-value">${signedPct(scenario.demand_shift_pct || 0)}</div>
+            </div>
+            <div class="forecast-metric">
+              <div class="forecast-metric-label">Trend Ramp</div>
+              <div class="forecast-metric-value">${signedPct(scenario.trend_ramp_pct || 0)}</div>
+            </div>
+            <div class="forecast-metric">
+              <div class="forecast-metric-label">Governance Drag</div>
+              <div class="forecast-metric-value">-${fmtPct(scenario.governance_drag_pct || 0)}</div>
+            </div>
+            <div class="forecast-metric">
+              <div class="forecast-metric-label">Savings Realization</div>
+              <div class="forecast-metric-value">${fmtPct(Number(scenario.capture_realization_pct || 0) * 100, 0)}</div>
+            </div>
+          </div>
+          <ul class="forecast-bullets">
+            ${(scenario.assumptions || []).map((item) => `<li>${esc(item)}</li>`).join("")}
+          </ul>
+        </div>
+
+        <div class="forecast-detail-card">
+          <div class="card-title" style="font-size:14px">Scenario Readout</div>
+          <div class="forecast-metric-grid">
+            <div class="forecast-metric">
+              <div class="forecast-metric-label">Planning Horizon</div>
+              <div class="forecast-metric-value">${state.forecastHorizonMonths} months</div>
+            </div>
+            <div class="forecast-metric">
+              <div class="forecast-metric-label">Input Shift vs Actual</div>
+              <div class="forecast-metric-value">${signedPct(scenarioDeltaPct)}</div>
+            </div>
+            <div class="forecast-metric">
+              <div class="forecast-metric-label">Projected Exit Rate</div>
+              <div class="forecast-metric-value">${finalPoint ? compactUSD(finalPoint.predicted_spend_usd) : "Not generated"}</div>
+            </div>
+            <div class="forecast-metric">
+              <div class="forecast-metric-label">Projected Change</div>
+              <div class="forecast-metric-value">${finalPoint ? signedPct(projectedDeltaPct) : "N/A"}</div>
+            </div>
+          </div>
+          <div class="hint" style="margin-top:10px">Scenario cards change the demand and control assumptions that feed the planning model. Generate applies the selected scenario to the live projection.</div>
+        </div>
+      </div>
+
+      <div style="height:320px;margin-top:14px"><canvas id="chart-forecast"></canvas></div>
     </div>
 
     <div class="grid grid-3">${estimateCards}</div>
 
     <div class="card" style="margin-top:12px">
       <div class="card-title" style="margin-bottom:8px">Inputs Used</div>
-      <div class="hint">Monthly spend input series (K USD): ${trend.map((x) => x.total).join(", ")}</div>
-      <div class="hint" style="margin-top:4px">Forecast horizon: 3 months</div>
+      <div class="hint">Observed monthly spend series (K USD): ${trend.map((x) => x.total).join(", ")}</div>
+      <div class="hint" style="margin-top:4px">${esc(scenario.label)} adjusted series (K USD): ${adjustedSeries.map((value) => Math.round(value / 1000)).join(", ")}</div>
+      <div class="hint" style="margin-top:4px">Forecast horizon: ${state.forecastHorizonMonths} months</div>
     </div>
   `;
 }
@@ -2897,22 +3662,13 @@ function forecastView() {
 function renderForecastChart() {
   const trend = dataset.overview?.spend_trend_k_usd || [];
   const historical = trend.map((item) => Number(item.total || 0) * 1000);
-  const labels = trend.map((item) => item.month);
-
+  const historicalLabels = trend.map((item) => item.month);
   const forecastPoints = state.forecastResult?.points || [];
-  for (const point of forecastPoints) {
-    labels.push(`+${point.month_offset}`);
-  }
-
-  const predicted = [...historical];
-  const lower = Array(historical.length).fill(null);
-  const upper = Array(historical.length).fill(null);
-
-  for (const point of forecastPoints) {
-    predicted.push(Number(point.predicted_spend_usd || 0));
-    lower.push(Number(point.lower_bound_usd || 0));
-    upper.push(Number(point.upper_bound_usd || 0));
-  }
+  const futureLabels = forecastProjectionLabels(forecastPoints);
+  const labels = historicalLabels.concat(futureLabels);
+  const predicted = forecastPoints.map((point) => Number(point.predicted_spend_usd || 0));
+  const lower = forecastPoints.map((point) => Number(point.lower_bound_usd || 0));
+  const upper = forecastPoints.map((point) => Number(point.upper_bound_usd || 0));
 
   createChart("chart-forecast", {
     type: "line",
@@ -2920,17 +3676,28 @@ function renderForecastChart() {
       labels,
       datasets: [
         {
-          label: "Predicted spend",
-          data: predicted,
+          label: "Historical spend",
+          data: historical.concat(Array(forecastPoints.length).fill(null)),
+          borderColor: "rgba(125, 154, 197, 0.78)",
+          backgroundColor: "rgba(125, 154, 197, 0.08)",
+          fill: false,
+          tension: 0.2,
+          pointRadius: 3,
+          borderWidth: 2
+        },
+        {
+          label: `${getForecastScenario().label} forecast`,
+          data: Array(historical.length).fill(null).concat(predicted),
           borderColor: "#4f8ef8",
           backgroundColor: "rgba(79,142,248,0.12)",
-          fill: true,
+          fill: false,
           tension: 0.26,
-          pointRadius: 3
+          pointRadius: 3,
+          borderWidth: 3
         },
         {
           label: "Lower bound",
-          data: lower,
+          data: Array(historical.length).fill(null).concat(lower),
           borderColor: "#eda82e",
           borderDash: [6, 6],
           fill: false,
@@ -2939,7 +3706,7 @@ function renderForecastChart() {
         },
         {
           label: "Upper bound",
-          data: upper,
+          data: Array(historical.length).fill(null).concat(upper),
           borderColor: "#2ac487",
           borderDash: [6, 6],
           fill: false,
@@ -2950,6 +3717,17 @@ function renderForecastChart() {
     },
     options: {
       ...chartOptions(),
+      plugins: {
+        ...chartOptions().plugins,
+        legend: {
+          display: true,
+          labels: {
+            color: "#a9b4cf",
+            boxWidth: 14,
+            boxHeight: 14
+          }
+        }
+      },
       scales: {
         ...chartOptions().scales,
         y: {
@@ -3218,7 +3996,12 @@ async function apiRequest(method, path, body) {
     options.body = JSON.stringify(body);
   }
 
-  const response = await fetch(path, options);
+  let response;
+  try {
+    response = await fetch(path, options);
+  } catch (error) {
+    throw new Error(summarizeApiError(error));
+  }
   const text = await response.text();
   let data;
   try {
@@ -3238,20 +4021,52 @@ async function bootstrapDemoData() {
     const result = await apiRequest("POST", "/v1/demo/bootstrap", {});
     state.lastPayload = { action: "bootstrap" };
     state.lastResponse = result;
-    appendLog("ok", "Bootstrap", "Demo index entries seeded successfully.");
-    showToast("Bootstrap Complete", "Demo entries are ready for interception scenarios.");
+    setDemoOutcome({
+      title: "Demo Initialized",
+      headline: "Synthetic attribution state is loaded and ready for live walkthrough steps.",
+      detail: "Representative workloads, ownership mappings, and governance context are now active so the next actions demonstrate real product behavior instead of static mock data.",
+      metrics: [
+        { label: "Seeded entries", value: String(result.seeded_entries || 0) },
+        { label: "Workloads", value: String((result.workloads || []).length) },
+        { label: "Graph nodes", value: String(result.graph_nodes || 0) },
+        { label: "Mode", value: modeLabel(String(result.interceptor_mode || state.mode).toLowerCase()) }
+      ],
+      why: "This turns the demo into a live operating simulation with deterministic state behind the UI."
+    });
+    appendLog(
+      "ok",
+      "Demo initialized",
+      "Synthetic workloads, ownership mappings, and governance state loaded successfully.",
+      null,
+      { why: "Subsequent walkthrough actions now reflect live attribution and policy outcomes." }
+    );
+    showToast("Demo Ready", "Live walkthrough steps can now be run.");
   } catch (error) {
-    appendLog("err", "Bootstrap failed", String(error));
-    showToast("Bootstrap Failed", "Check API availability and retry.");
+    const message = summarizeApiError(error, "The demo could not be initialized.");
+    setDemoOutcome({
+      title: "Initialization unavailable",
+      headline: "The live runtime could not be reached from the browser.",
+      detail: message,
+      metrics: [
+        { label: "Action", value: "Initialize Demo" },
+        { label: "Status", value: "Unavailable" }
+      ],
+      why: "The walkthrough depends on the local demo API. Once that runtime is available, the panel will show live product behavior."
+    });
+    appendLog("err", "Demo unavailable", message, null, {
+      why: "The guided walkthrough is only meaningful when the local demo API is running."
+    });
+    showToast("Demo Unavailable", message);
   }
 }
 
 async function runInterceptScenario(kind) {
   const scenario = dataset.demo_scenarios?.[kind];
   if (!scenario) {
-    appendLog("warn", "Scenario unavailable", `Scenario '${kind}' is not configured.`);
+    appendLog("warn", "Scenario unavailable", `Scenario '${kind}' is not configured.`, null, { hidden: true });
     return;
   }
+  const scenarioName = String(scenario.label || kind).replace(/^Scenario [A-Z]:\s*/, "");
 
   const payload = {
     request_id: `demo-${kind}-${Date.now()}`,
@@ -3265,12 +4080,43 @@ async function runInterceptScenario(kind) {
     const response = await apiRequest("POST", "/v1/intercept", payload);
     state.lastResponse = response;
     const outcome = response?.outcome || "unknown";
-    appendLog("ok", scenario.label, `Interceptor outcome: ${outcome}`);
-    showToast(scenario.label, `Outcome: ${outcome}`);
+    const narrative = scenarioNarrative(kind);
+    const confidence = response?.attribution_confidence != null ? `${Math.round(Number(response.attribution_confidence || 0) * 100)}%` : "N/A";
+    const team = response?.attribution_team || "Not attributed";
+    setDemoOutcome({
+      title: narrative.title,
+      headline: narrative.headline,
+      detail: `${scenarioName} completed with outcome ${interceptOutcomeLabel(outcome)}. ${response?.redirect_model ? `The request was redirected to ${response.redirect_model}.` : ""}`.trim(),
+      metrics: [
+        { label: "Outcome", value: interceptOutcomeLabel(outcome) },
+        { label: "Team", value: team },
+        { label: "Confidence", value: confidence },
+        { label: "Latency", value: `${Number(response?.elapsed_ms || 0).toFixed(1)} ms` }
+      ],
+      why: narrative.why
+    });
+    appendLog("ok", narrative.title, `${scenarioName} completed with outcome ${interceptOutcomeLabel(outcome)}.`, null, {
+      why: narrative.why
+    });
+    showToast(narrative.title, `Outcome: ${interceptOutcomeLabel(outcome)}`);
   } catch (error) {
     state.lastResponse = { error: String(error) };
-    appendLog("err", scenario.label, String(error));
-    showToast("Scenario Failed", `${scenario.label} did not complete.`);
+    const narrative = scenarioNarrative(kind);
+    const message = summarizeApiError(error, `${scenario.label} did not complete.`);
+    setDemoOutcome({
+      title: narrative.title,
+      headline: "The live walkthrough step could not be completed.",
+      detail: message,
+      metrics: [
+        { label: "Scenario", value: scenarioName },
+        { label: "Status", value: "Unavailable" }
+      ],
+      why: "The scenario depends on the local demo runtime. Once available, this panel will summarize the live result in plain language."
+    });
+    appendLog("err", narrative.title, message, null, {
+      why: "This is a runtime availability issue, not a product-behavior outcome."
+    });
+    showToast("Scenario Unavailable", message);
   }
   renderDrawer();
 }
@@ -3282,29 +4128,54 @@ async function runFullSequence() {
   await runInterceptScenario("fail_open");
 }
 
-async function runForecastDemo() {
-  const monthly = (dataset.overview?.spend_trend_k_usd || []).map((item) => Number(item.total || 0) * 1000);
+async function runForecastDemo(options = {}) {
+  const {
+    log = true,
+    toast = false,
+    statusOverride = ""
+  } = options;
+  const monthly = buildForecastInputSeries();
   if (!monthly.length) {
-    appendLog("warn", "Forecast unavailable", "No historical monthly spend points found in dataset.");
+    if (log) {
+      appendLog("warn", "Forecast unavailable", "No historical monthly spend points found in dataset.", null, { hidden: true });
+    }
     return;
   }
 
+  const scenario = getForecastScenario();
   const payload = {
     monthly_spend_usd: monthly,
-    horizon_months: 3
+    horizon_months: state.forecastHorizonMonths
   };
+
+  state.forecastLoading = true;
+  state.forecastStatus = `Generating ${scenario.label.toLowerCase()} forecast for ${state.forecastHorizonMonths} months...`;
+  render();
 
   try {
     const response = await apiRequest("POST", "/v1/forecast/spend", payload);
     state.forecastResult = response;
-    state.forecastStatus = `Forecast generated successfully. Trend ${fmtPct(response.trend_pct || 0)}.`;
-    appendLog("ok", "Forecast generated", `Trend ${fmtPct(response.trend_pct || 0)} across ${response.points?.length || 0} points.`);
+    state.forecastDirty = false;
+    state.forecastStatus = statusOverride || `${scenario.label} forecast generated successfully. Trend ${fmtPct(response.trend_pct || 0)} across ${state.forecastHorizonMonths} months.`;
+    if (log) {
+      appendLog("ok", "Forecast generated", `${scenario.label} trend ${fmtPct(response.trend_pct || 0)} across ${response.points?.length || 0} projection points.`, null, { hidden: true });
+    }
+    if (toast) {
+      showToast("Forecast Updated", `${scenario.label} scenario projected across ${state.forecastHorizonMonths} months.`);
+    }
   } catch (error) {
     state.forecastResult = null;
     state.forecastStatus = "Forecast generation failed.";
-    appendLog("err", "Forecast failed", String(error));
+    if (log) {
+      appendLog("err", "Forecast failed", summarizeApiError(error, "Live forecast generation failed."), null, { hidden: true });
+    }
+    if (toast) {
+      showToast("Forecast Failed", summarizeApiError(error, "The live forecast request did not complete."));
+    }
+  } finally {
+    state.forecastLoading = false;
+    render();
   }
-  render();
 }
 
 async function sendIntegrationDemo() {
@@ -3324,12 +4195,12 @@ async function sendIntegrationDemo() {
   try {
     const response = await apiRequest("POST", "/v1/integrations/notify", payload);
     state.integrationDeliveries = Array.isArray(response) ? response : [];
-    appendLog("ok", "Integration dispatch", `Sent ${state.integrationDeliveries.length} notifications.`);
+    appendLog("ok", "Integration dispatch", `Sent ${state.integrationDeliveries.length} notifications.`, null, { hidden: true });
     showToast("Notification Dispatch Complete", `${state.integrationDeliveries.length} delivery records created.`);
     render();
   } catch (error) {
-    appendLog("err", "Integration dispatch failed", String(error));
-    showToast("Dispatch Failed", "Unable to send integration test event.");
+    appendLog("err", "Integration dispatch failed", summarizeApiError(error, "Notification simulation did not complete."), null, { hidden: true });
+    showToast("Dispatch Failed", summarizeApiError(error, "Unable to send integration test event."));
   }
 }
 
@@ -3337,10 +4208,10 @@ async function refreshIntegrationFeed() {
   try {
     const response = await apiRequest("GET", "/v1/integrations/deliveries?limit=20");
     state.integrationDeliveries = Array.isArray(response) ? response : [];
-    appendLog("ok", "Delivery feed", `Loaded ${state.integrationDeliveries.length} delivery records.`);
+    appendLog("ok", "Delivery feed", `Loaded ${state.integrationDeliveries.length} delivery records.`, null, { hidden: true });
     render();
   } catch (error) {
-    appendLog("err", "Delivery feed failed", String(error));
+    appendLog("err", "Delivery feed failed", summarizeApiError(error, "Delivery feed refresh did not complete."), null, { hidden: true });
   }
 }
 
@@ -3360,7 +4231,7 @@ async function loadDataset() {
     }
   } catch (error) {
     dataset = FALLBACK_DATASET;
-    appendLog("warn", "Dataset fallback", `Failed to load demo_dataset.json: ${String(error)}`);
+    appendLog("warn", "Dataset fallback", `Failed to load demo_dataset.json: ${String(error)}`, null, { hidden: true });
   }
 }
 
@@ -3463,13 +4334,21 @@ function handleAction(actionEl) {
       state.interventionFilter = actionEl.dataset.filter || "all";
       render();
       return;
+    case "forecast-set-scenario":
+      state.forecastScenarioKey = actionEl.dataset.scenarioKey || DEFAULT_FORECAST_SCENARIO;
+      markForecastDirty();
+      render();
+      return;
+    case "forecast-set-horizon":
+      state.forecastHorizonMonths = Number(actionEl.dataset.months || DEFAULT_FORECAST_HORIZON);
+      markForecastDirty();
+      render();
+      return;
     case "forecast-generate":
-      void runForecastDemo();
+      void runForecastDemo({ toast: true });
       return;
     case "forecast-reset":
-      state.forecastResult = null;
-      state.forecastStatus = "Forecast reset.";
-      render();
+      void resetForecastPlanner({ toast: true });
       return;
     case "integrations-send":
       void sendIntegrationDemo();
@@ -3534,8 +4413,8 @@ async function initialize() {
   await syncInterventionsFromApi();
   hydrateInterventionStatuses();
   applyDatasetMetadata();
-  render();
-  appendLog("ok", "Demo initialized", "Frontend dataset loaded and runtime controls ready.");
+  await resetForecastPlanner();
+  appendLog("ok", "Demo initialized", "Frontend dataset loaded and runtime controls ready.", null, { hidden: true });
 }
 
 document.addEventListener("click", onDocumentClick);
