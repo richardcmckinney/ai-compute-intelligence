@@ -1212,6 +1212,23 @@ body {
   margin-bottom: 8px;
 }
 
+.glossary-category {
+  margin-bottom: 14px;
+}
+
+.glossary-category-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.glossary-category-meta {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
 .glossary-title {
   font-size: 13px;
   font-weight: 650;
@@ -1228,8 +1245,28 @@ body {
   letter-spacing: 0.07em;
 }
 
+.glossary-definition {
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.glossary-context {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
 .faq-category {
   margin-bottom: 12px;
+}
+
+.faq-category-description {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin: 4px 0 10px;
+  line-height: 1.55;
 }
 
 .faq-item {
@@ -1265,7 +1302,7 @@ body {
 }
 
 .faq-item.open .faq-answer {
-  max-height: 220px;
+  max-height: 420px;
   border-top-color: var(--border);
   padding: 10px 14px 12px;
 }
@@ -1818,6 +1855,7 @@ const state = {
   forecastDirty: false,
   forecastLoading: false,
   integrationDeliveries: [],
+  glossaryQuery: "",
   faqQuery: "",
   faqOpenKeys: new Set()
 };
@@ -3813,12 +3851,38 @@ function integrationsView() {
 }
 
 function glossaryView() {
-  const items = dataset.glossary || [];
-  const rendered = items.map((entry) => {
-    return `
+  const query = state.glossaryQuery.trim().toLowerCase();
+  const filtered = (dataset.glossary || []).filter((entry) => {
+    if (!query) {
+      return true;
+    }
+    const hay = `${entry.term || ""} ${entry.aka || ""} ${entry.category || ""} ${entry.definition || ""} ${entry.why_it_matters || ""}`.toLowerCase();
+    return hay.includes(query);
+  });
+  const groups = filtered.reduce((acc, entry) => {
+    const category = entry.category || "General";
+    if (!acc.has(category)) {
+      acc.set(category, []);
+    }
+    acc.get(category).push(entry);
+    return acc;
+  }, new Map());
+
+  const rendered = Array.from(groups.entries()).map(([category, entries]) => {
+    const items = entries.map((entry) => `
       <div class="glossary-term">
         <div class="glossary-title">${esc(entry.term)} ${entry.aka ? `<span class='glossary-aka'>${esc(entry.aka)}</span>` : ""}</div>
-        <div class="hint">${esc(entry.definition)}</div>
+        <div class="glossary-definition">${esc(entry.definition)}</div>
+        ${entry.why_it_matters ? `<div class="glossary-context"><strong>Why it matters:</strong> ${esc(entry.why_it_matters)}</div>` : ""}
+      </div>
+    `).join("");
+    return `
+      <div class="glossary-category">
+        <div class="glossary-category-head">
+          <div class="section-title">${esc(category)}</div>
+          <div class="glossary-category-meta">${entries.length} term${entries.length === 1 ? "" : "s"}</div>
+        </div>
+        ${items}
       </div>
     `;
   }).join("");
@@ -3828,10 +3892,18 @@ function glossaryView() {
       <div class="card-header">
         <div>
           <div class="card-title">Glossary</div>
-          <div class="card-subtitle">Investor-facing terminology and architecture definitions</div>
+          <div class="card-subtitle">Investor-facing terminology, organized by platform concept and operating layer.</div>
         </div>
       </div>
-      ${rendered}
+      <input
+        type="text"
+        value="${esc(state.glossaryQuery)}"
+        placeholder="Search terms (TRAC, fail-open, manual mapping, forecasting...)"
+        style="width:100%;border:1px solid var(--border);background:var(--surface);color:var(--text);padding:9px 10px;border-radius:8px;font:inherit;font-size:12px"
+        data-action-input="glossary-query"
+      />
+      <div class="hint" style="margin:8px 0 12px">${filtered.length} term${filtered.length === 1 ? "" : "s"} shown across ${groups.size} categor${groups.size === 1 ? "y" : "ies"}.</div>
+      ${rendered || `<div class='hint'>No glossary terms match this search query.</div>`}
     </div>
   `;
 }
@@ -3849,6 +3921,7 @@ function faqView() {
     return {
       key: `cat-${idx}`,
       name: category.category,
+      description: category.description,
       items: filteredItems
     };
   }).filter((cat) => cat.items.length > 0);
@@ -3870,6 +3943,7 @@ function faqView() {
     return `
       <div class="faq-category">
         <div class="section-title">${esc(category.name)}</div>
+        ${category.description ? `<div class="faq-category-description">${esc(category.description)}</div>` : ""}
         ${items}
       </div>
     `;
@@ -3890,7 +3964,7 @@ function faqView() {
         style="width:100%;border:1px solid var(--border);background:var(--surface);color:var(--text);padding:9px 10px;border-radius:8px;font:inherit;font-size:12px"
         data-action-input="faq-query"
       />
-      <div class="hint" style="margin:8px 0 12px">Includes the full recommendation methodology requested in reviewer feedback.</div>
+      <div class="hint" style="margin:8px 0 12px">Covers platform logic, deployment posture, governance controls, interventions, and forecasting assumptions.</div>
       ${markup || `<div class='hint'>No FAQ items match this search query.</div>`}
     </div>
   `;
@@ -4388,6 +4462,11 @@ function onDocumentClick(event) {
 function onDocumentInput(event) {
   const target = event.target;
   if (!(target instanceof HTMLInputElement)) {
+    return;
+  }
+  if (target.dataset.actionInput === "glossary-query") {
+    state.glossaryQuery = target.value;
+    render();
     return;
   }
   if (target.dataset.actionInput === "faq-query") {
