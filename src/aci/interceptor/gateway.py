@@ -28,6 +28,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import structlog
+from prometheus_client import Counter, Gauge, Histogram
 
 from aci.config import InterceptorConfig
 from aci.interceptor.circuit_breaker import CircuitBreaker, CircuitStateStore
@@ -42,6 +43,25 @@ if TYPE_CHECKING:
     from aci.models.attribution import AttributionIndexEntry
 
 logger = structlog.get_logger()
+
+FAIL_OPEN_TOTAL = Counter(
+    "aci_fail_open_total",
+    "Total fail-open outcomes by reason.",
+    labelnames=("reason",),
+)
+FAIL_OPEN_RATE = Gauge(
+    "aci_fail_open_rate",
+    "Cumulative fail-open rate (total_fail_open / total_requests).",
+)
+INTERCEPTOR_LATENCY_P99 = Histogram(
+    "aci_interceptor_latency_p99",
+    "Interceptor latency observations (ms).",
+    buckets=(1, 2, 5, 10, 15, 20, 30, 50, 75, 100, 200, 500),
+)
+CIRCUIT_BREAKER_STATE = Gauge(
+    "aci_circuit_breaker_state",
+    "Circuit breaker state encoded as closed=0, half_open=1, open=2.",
+)
 
 
 class EventPublisher(Protocol):
@@ -67,6 +87,18 @@ class InterceptionOutcome(StrEnum):
     FAIL_OPEN = "fail_open"
     CIRCUIT_OPEN = "circuit_open"
     TIMEOUT = "timeout"
+
+
+class FailOpenReason(StrEnum):
+    """Normalized fail-open reasons exposed in response headers."""
+
+    INDEX_UNAVAILABLE = "INDEX_UNAVAILABLE"
+    POLICY_TIMEOUT = "POLICY_TIMEOUT"
+    LOOKUP_TIMEOUT = "LOOKUP_TIMEOUT"
+    DEPENDENCY_UNREACHABLE = "DEPENDENCY_UNREACHABLE"
+    CONFIG_INVALID = "CONFIG_INVALID"
+    RUNTIME_EXCEPTION = "RUNTIME_EXCEPTION"
+    RESOURCE_EXHAUSTION = "RESOURCE_EXHAUSTION"
 
 
 @dataclass
@@ -159,7 +191,9 @@ class FailOpenInterceptor:
         start = time.monotonic()
 
         try:
-            return await self._intercept_inner(request, start)
+            result = await self._intercept_inner(request, start)
+            self._record_observability_metrics(result)
+            return result
         except Exception as exc:
             elapsed_ms = (time.monotonic() - start) * 1000
             self.total_fail_open += 1
@@ -172,6 +206,7 @@ class FailOpenInterceptor:
                     workload_id,
                     request.request_id,
                     elapsed_ms,
+                    tenant_id=self._resolve_tenant_id(request),
                 )
             logger.error(
                 "interceptor.fail_open.exception",
@@ -179,12 +214,15 @@ class FailOpenInterceptor:
                 error=str(exc),
                 elapsed_ms=elapsed_ms,
             )
-            return InterceptionResult(
+            result = InterceptionResult(
                 outcome=InterceptionOutcome.FAIL_OPEN,
                 request_id=request.request_id,
                 elapsed_ms=elapsed_ms,
                 shadow_event_logged=shadow_logged,
+                enrichment_headers=self._build_fail_open_headers(FailOpenReason.RUNTIME_EXCEPTION),
             )
+            self._record_observability_metrics(result)
+            return result
 
     async def _intercept_inner(
         self,
@@ -192,6 +230,7 @@ class FailOpenInterceptor:
         start: float,
     ) -> InterceptionResult:
         """Core interception logic within the safety wrapper."""
+        request.headers = self._sanitize_request_headers(request.headers)
 
         # Step 1: Circuit breaker.
         if self.circuit_breaker.is_open:
@@ -201,6 +240,7 @@ class FailOpenInterceptor:
                 outcome=InterceptionOutcome.CIRCUIT_OPEN,
                 request_id=request.request_id,
                 elapsed_ms=elapsed_ms,
+                enrichment_headers=self._build_fail_open_headers(FailOpenReason.RESOURCE_EXHAUSTION),
             )
 
         # Step 2: O(1) index lookup. Synchronous hash map access.
@@ -238,6 +278,7 @@ class FailOpenInterceptor:
                 workload_id,
                 request.request_id,
                 elapsed_ms,
+                tenant_id=self._resolve_tenant_id(request),
             )
 
             return InterceptionResult(
@@ -245,6 +286,7 @@ class FailOpenInterceptor:
                 request_id=request.request_id,
                 elapsed_ms=elapsed_ms,
                 shadow_event_logged=shadow_logged,
+                enrichment_headers=self._build_fail_open_headers(FailOpenReason.INDEX_UNAVAILABLE),
             )
 
         # Step 3: Time budget check.
@@ -256,18 +298,61 @@ class FailOpenInterceptor:
                 workload_id,
                 request.request_id,
                 elapsed_so_far,
+                tenant_id=self._resolve_tenant_id(request),
             )
             return InterceptionResult(
                 outcome=InterceptionOutcome.TIMEOUT,
                 request_id=request.request_id,
                 elapsed_ms=elapsed_so_far,
                 attribution=attribution,
-                enrichment_headers=self._build_basic_headers(request, attribution),
+                enrichment_headers=self._build_basic_headers(
+                    request,
+                    attribution,
+                    fail_open_reason=FailOpenReason.LOOKUP_TIMEOUT,
+                ),
                 shadow_event_logged=shadow_logged,
             )
 
         # Step 4: Policy evaluation. O(1) threshold checks.
+        policy_start = time.monotonic()
         violations = self._evaluate_policies(request, attribution)
+        policy_elapsed_ms = (time.monotonic() - policy_start) * 1000
+        if policy_elapsed_ms > self.config.policy_timeout_ms:
+            self.total_fail_open += 1
+            elapsed_ms = (time.monotonic() - start) * 1000
+            self._emit_policy_evaluation_event(
+                request=request,
+                workload_id=workload_id,
+                violations=violations,
+                elapsed_ms=elapsed_ms,
+                fail_open=True,
+            )
+            shadow_logged = self._emit_shadow_event(
+                EventType.SHADOW_INTERCEPT_TIMEOUT,
+                workload_id,
+                request.request_id,
+                elapsed_ms,
+                tenant_id=self._resolve_tenant_id(request),
+            )
+            return InterceptionResult(
+                outcome=InterceptionOutcome.TIMEOUT,
+                request_id=request.request_id,
+                elapsed_ms=elapsed_ms,
+                attribution=attribution,
+                enrichment_headers=self._build_basic_headers(
+                    request,
+                    attribution,
+                    fail_open_reason=FailOpenReason.POLICY_TIMEOUT,
+                ),
+                shadow_event_logged=shadow_logged,
+            )
+        self._emit_policy_evaluation_event(
+            request=request,
+            workload_id=workload_id,
+            violations=violations,
+            elapsed_ms=(time.monotonic() - start) * 1000,
+            fail_open=False,
+        )
 
         # Step 5: Mode-dependent routing.
         if self.mode == DeploymentMode.PASSIVE:
@@ -302,6 +387,27 @@ class FailOpenInterceptor:
             )
 
         elif self.mode == DeploymentMode.ACTIVE:
+            if (
+                attribution.confidence < self.config.active_lite_min_confidence
+                or self._should_downgrade_active_to_advisory(request)
+            ):
+                headers = self._build_enrichment_headers(request, attribution, violations)
+                has_violation = any(v.violated for v in violations)
+                outcome = (
+                    InterceptionOutcome.SOFT_STOPPED
+                    if has_violation
+                    else InterceptionOutcome.ENRICHED
+                )
+                elapsed_ms = (time.monotonic() - start) * 1000
+                self.total_enriched += 1
+                return InterceptionResult(
+                    outcome=outcome,
+                    request_id=request.request_id,
+                    enrichment_headers=headers,
+                    elapsed_ms=elapsed_ms,
+                    attribution=attribution,
+                    policy_results=violations,
+                )
             result = self._active_routing(request, attribution, violations, start)
             self.circuit_breaker.record_success()
             return result
@@ -366,6 +472,39 @@ class FailOpenInterceptor:
                 )
             )
 
+        # Input token budget (static payload size gate).
+        if attribution.token_budget_input and request.input_tokens > attribution.token_budget_input:
+            violations.append(
+                PolicyEvaluationResult(
+                    policy_id="token_budget_input",
+                    policy_name="Token Size Limit",
+                    action=EnforcementAction.SOFT_STOP,
+                    violated=True,
+                    details=(
+                        f"Input tokens {request.input_tokens} exceed budget "
+                        f"{attribution.token_budget_input}"
+                    ),
+                )
+            )
+
+        # Per-request cost ceiling.
+        if (
+            attribution.cost_ceiling_per_request_usd is not None
+            and request.estimated_cost_usd > attribution.cost_ceiling_per_request_usd
+        ):
+            violations.append(
+                PolicyEvaluationResult(
+                    policy_id="cost_ceiling",
+                    policy_name="High-Cost Model Approval Gate",
+                    action=EnforcementAction.SOFT_STOP,
+                    violated=True,
+                    details=(
+                        f"Estimated request cost {request.estimated_cost_usd:.6f} exceeds cap "
+                        f"{attribution.cost_ceiling_per_request_usd:.6f}"
+                    ),
+                )
+            )
+
         return violations
 
     def _active_routing(
@@ -378,9 +517,21 @@ class FailOpenInterceptor:
         """Active mode: may redirect to equivalent model (Section 6.2)."""
         headers = self._build_enrichment_headers(request, attribution, violations)
 
-        hard_stops = [v for v in violations if v.action == EnforcementAction.HARD_STOP]
-        if hard_stops:
+        hard_stop_ids = {"model_allowlist", "budget_ceiling", "token_budget_input", "cost_ceiling"}
+        hard_stops = [
+            v
+            for v in violations
+            if v.action == EnforcementAction.HARD_STOP or v.policy_id in hard_stop_ids
+        ]
+        if hard_stops and attribution.confidence >= self.config.active_lite_gate_min_confidence:
             elapsed_ms = (time.monotonic() - start) * 1000
+            self._emit_intervention_event(
+                request=request,
+                action_type="GATE_REJECT",
+                elapsed_ms=elapsed_ms,
+                attribution=attribution,
+                new_model=None,
+            )
             return InterceptionResult(
                 outcome=InterceptionOutcome.HARD_STOPPED,
                 request_id=request.request_id,
@@ -397,8 +548,18 @@ class FailOpenInterceptor:
             alt_model = attribution.approved_alternatives[0]
             elapsed_ms = (time.monotonic() - start) * 1000
             self.total_redirected += 1
-            headers["X-Original-Model"] = request.model
-            headers["X-Redirected-To"] = alt_model
+            headers["X-ACI-Intervention-Applied"] = "true"
+            headers["X-ACI-Intervention-Type"] = "MODEL_ROUTE"
+            headers["X-ACI-Intervention-Delta"] = (
+                f"{{model:{request.model}->{alt_model}}}"
+            )[:512]
+            self._emit_intervention_event(
+                request=request,
+                action_type="MODEL_ROUTE",
+                elapsed_ms=elapsed_ms,
+                attribution=attribution,
+                new_model=alt_model,
+            )
             return InterceptionResult(
                 outcome=InterceptionOutcome.REDIRECTED,
                 request_id=request.request_id,
@@ -415,6 +576,14 @@ class FailOpenInterceptor:
         )
         elapsed_ms = (time.monotonic() - start) * 1000
         self.total_enriched += 1
+        if has_violation:
+            self._emit_intervention_event(
+                request=request,
+                action_type="SOFT_STOP",
+                elapsed_ms=elapsed_ms,
+                attribution=attribution,
+                new_model=None,
+            )
         return InterceptionResult(
             outcome=outcome,
             request_id=request.request_id,
@@ -428,11 +597,18 @@ class FailOpenInterceptor:
         self,
         request: InterceptionRequest,
         attribution: AttributionIndexEntry,
+        fail_open_reason: FailOpenReason | None = None,
     ) -> dict[str, str]:
-        return {
-            "X-Compute-Cost-USD": f"{request.estimated_cost_usd:.6f}",
-            "X-Attribution-Confidence": f"{attribution.confidence:.2f}",
+        headers: dict[str, str] = {
+            "X-ACI-Est-Cost-USD": f"{request.estimated_cost_usd:.6f}",
+            "X-ACI-Attribution-Confidence": f"{attribution.confidence:.2f}",
         }
+        snapshot_id = str(request.metadata.get("price_snapshot_id", "")).strip()
+        if snapshot_id:
+            headers["X-ACI-Price-Snapshot-Id"] = snapshot_id
+        if fail_open_reason is not None:
+            headers.update(self._build_fail_open_headers(fail_open_reason))
+        return self._enforce_header_budget(headers)
 
     def _build_enrichment_headers(
         self,
@@ -441,27 +617,44 @@ class FailOpenInterceptor:
         violations: list[PolicyEvaluationResult],
     ) -> dict[str, str]:
         """Full enrichment headers (Section 6.4)."""
+        owner_id = attribution.team_id or attribution.person_id or attribution.team_name
+        advisory_code, advisory_detail = self._build_advisory(
+            request,
+            attribution,
+            violations,
+        )
+
         headers: dict[str, str] = {
-            "X-Compute-Cost-USD": f"{request.estimated_cost_usd:.6f}",
-            "X-Attribution-Confidence": f"{attribution.confidence:.2f}",
-            "X-Attribution-Team": attribution.team_name,
-            "X-Attribution-Method": attribution.method_used,
+            "X-ACI-Est-Cost-USD": f"{request.estimated_cost_usd:.6f}",
+            "X-ACI-Attribution-Owner-Id": owner_id,
+            "X-ACI-Attribution-Confidence": f"{attribution.confidence:.2f}",
+            "X-ACI-Attribution-Reason": self._map_attribution_reason(attribution.method_used),
+            "X-ACI-Model": request.model,
+            "X-ACI-Advisory": "true" if advisory_code else "false",
         }
+        snapshot_id = str(request.metadata.get("price_snapshot_id", "")).strip()
+        if snapshot_id:
+            headers["X-ACI-Price-Snapshot-Id"] = snapshot_id
+        if advisory_code:
+            headers["X-ACI-Advisory-Code"] = advisory_code
+            headers["X-ACI-Advisory-Detail"] = advisory_detail
+        if attribution.team_name:
+            headers["X-ACI-Team-Name"] = attribution.team_name
 
         if attribution.budget_remaining_usd is not None and attribution.budget_limit_usd:
             pct = (attribution.budget_remaining_usd / attribution.budget_limit_usd) * 100
-            headers["X-Budget-Remaining-Pct"] = f"{pct:.0f}"
+            headers["X-ACI-Budget-Remaining-Pct"] = f"{pct:.0f}"
 
         if attribution.approved_alternatives:
-            headers["X-Alternative-Models-Available"] = ",".join(attribution.approved_alternatives)
+            headers["X-ACI-Alternative-Models"] = ",".join(attribution.approved_alternatives)
 
         if attribution.confidence_tier == "provisional":
-            headers["X-Confidence-Flag"] = "PROVISIONAL"
+            headers["X-ACI-Confidence-Flag"] = "PROVISIONAL"
         elif attribution.confidence_tier == "estimated":
-            headers["X-Confidence-Flag"] = "ESTIMATED"
+            headers["X-ACI-Confidence-Flag"] = "ESTIMATED"
 
         if violations:
-            headers["X-Policy-Violations"] = str(len(violations))
+            headers["X-ACI-Policy-Violations"] = str(len(violations))
 
         return self._enforce_header_budget(headers)
 
@@ -482,14 +675,23 @@ class FailOpenInterceptor:
 
         # Keep core attribution headers; drop optional headers first.
         priority = [
-            "X-Compute-Cost-USD",
-            "X-Attribution-Confidence",
-            "X-Attribution-Team",
-            "X-Attribution-Method",
-            "X-Confidence-Flag",
-            "X-Policy-Violations",
-            "X-Budget-Remaining-Pct",
-            "X-Alternative-Models-Available",
+            "X-ACI-Est-Cost-USD",
+            "X-ACI-Attribution-Owner-Id",
+            "X-ACI-Attribution-Confidence",
+            "X-ACI-Attribution-Reason",
+            "X-ACI-Price-Snapshot-Id",
+            "X-ACI-Advisory",
+            "X-ACI-Advisory-Code",
+            "X-ACI-Advisory-Detail",
+            "X-ACI-Confidence-Flag",
+            "X-ACI-Policy-Violations",
+            "X-ACI-Budget-Remaining-Pct",
+            "X-ACI-Alternative-Models",
+            "X-ACI-Intervention-Applied",
+            "X-ACI-Intervention-Type",
+            "X-ACI-Intervention-Delta",
+            "X-ACI-Fail-Open",
+            "X-ACI-Fail-Open-Reason",
         ]
         trimmed: dict[str, str] = {}
         for key in priority:
@@ -499,7 +701,7 @@ class FailOpenInterceptor:
                 trimmed.pop(key, None)
                 break
 
-        trimmed["X-Header-Budget-Applied"] = "1"
+        trimmed["X-ACI-Header-Budget-Applied"] = "1"
         return trimmed
 
     @staticmethod
@@ -512,6 +714,7 @@ class FailOpenInterceptor:
         workload_id: str,
         request_id: str,
         elapsed_ms: float,
+        tenant_id: str = "",
     ) -> bool:
         """
         Emit a shadow event to the event bus for async reconciliation (Section 6.3).
@@ -521,23 +724,104 @@ class FailOpenInterceptor:
         """
         if not self.config.shadow_events_enabled:
             return False
+        return self._publish_async_event(
+            event_type=event_type,
+            subject_id=workload_id,
+            attributes={
+                "request_id": request_id,
+                "workload_id": workload_id,
+                "elapsed_ms": elapsed_ms,
+                "interceptor_mode": self.mode.value,
+                "tenant_id": tenant_id,
+            },
+            idempotency_key=f"shadow:{request_id}",
+            tenant_id=tenant_id,
+        )
+
+    def _emit_policy_evaluation_event(
+        self,
+        *,
+        request: InterceptionRequest,
+        workload_id: str,
+        violations: list[PolicyEvaluationResult],
+        elapsed_ms: float,
+        fail_open: bool,
+    ) -> bool:
+        """Emit immutable audit event for every policy evaluation pass/fail."""
+        tenant_id = self._resolve_tenant_id(request)
+        violated_ids = [violation.policy_id for violation in violations if violation.violated]
+        return self._publish_async_event(
+            event_type=EventType.POLICY_EVALUATED,
+            subject_id=workload_id,
+            attributes={
+                "request_id": request.request_id,
+                "workload_id": workload_id,
+                "violation_count": len(violated_ids),
+                "violated_policy_ids": violated_ids,
+                "mode": self.mode.value,
+                "fail_open": fail_open,
+                "elapsed_ms": elapsed_ms,
+                "environment": str(request.metadata.get("environment", "")),
+            },
+            idempotency_key=f"policy_eval:{request.request_id}:{self.mode.value}",
+            tenant_id=tenant_id,
+        )
+
+    def _emit_intervention_event(
+        self,
+        *,
+        request: InterceptionRequest,
+        action_type: str,
+        elapsed_ms: float,
+        attribution: AttributionIndexEntry,
+        new_model: str | None,
+    ) -> bool:
+        """Emit immutable intervention audit event without blocking the hot path."""
+        workload_id = self._resolve_workload_id(request)
+        if not workload_id:
+            return False
+        tenant_id = self._resolve_tenant_id(request)
+        return self._publish_async_event(
+            event_type=EventType.INTERVENTION_APPLIED,
+            subject_id=workload_id,
+            attributes={
+                "request_id": request.request_id,
+                "workload_id": workload_id,
+                "action_type": action_type,
+                "original_model": request.model,
+                "new_model": new_model or "",
+                "attribution_confidence": attribution.confidence,
+                "estimated_cost_usd": request.estimated_cost_usd,
+                "environment": str(request.metadata.get("environment", "")),
+                "elapsed_ms": elapsed_ms,
+                "tenant_id": tenant_id,
+            },
+            idempotency_key=f"intervention:{request.request_id}:{action_type}",
+            tenant_id=tenant_id,
+        )
+
+    def _publish_async_event(
+        self,
+        *,
+        event_type: EventType,
+        subject_id: str,
+        attributes: dict[str, Any],
+        idempotency_key: str,
+        tenant_id: str = "",
+    ) -> bool:
+        """Best-effort async event publication for shadow/intervention events."""
         if self._event_bus is None:
-            return True
+            return False
 
         try:
             event = DomainEvent(
                 event_type=event_type,
-                subject_id=workload_id,
-                attributes={
-                    "request_id": request_id,
-                    "workload_id": workload_id,
-                    "elapsed_ms": elapsed_ms,
-                    "interceptor_mode": self.mode.value,
-                },
+                subject_id=subject_id,
+                attributes=attributes,
                 event_time=datetime.now(UTC),
                 source="interceptor",
-                idempotency_key=f"shadow:{request_id}",
-                tenant_id="",  # Populated by bus middleware in production.
+                idempotency_key=idempotency_key,
+                tenant_id=tenant_id,
             )
             publish_result = self._event_bus.publish(event)
             if inspect.isawaitable(publish_result):
@@ -547,7 +831,7 @@ class FailOpenInterceptor:
                 except RuntimeError:
                     if inspect.iscoroutine(awaitable):
                         awaitable.close()
-                    logger.debug("interceptor.shadow_event.no_running_loop")
+                    logger.debug("interceptor.event.no_running_loop", event_type=event_type.value)
                     return False
 
                 task = loop.create_task(self._drain_shadow_publish(awaitable))
@@ -556,9 +840,124 @@ class FailOpenInterceptor:
 
             return bool(publish_result)
         except Exception as exc:
-            # Shadow event emission must never raise on the hot path.
-            logger.debug("interceptor.shadow_event.failed", error=str(exc))
+            logger.debug(
+                "interceptor.event.publish_failed",
+                event_type=event_type.value,
+                error=str(exc),
+            )
             return False
+
+    def _record_observability_metrics(self, result: InterceptionResult) -> None:
+        """Update Prometheus metrics after interception outcome is computed."""
+        INTERCEPTOR_LATENCY_P99.observe(result.elapsed_ms)
+
+        fail_open_outcomes = {
+            InterceptionOutcome.FAIL_OPEN,
+            InterceptionOutcome.CIRCUIT_OPEN,
+            InterceptionOutcome.TIMEOUT,
+        }
+        if result.outcome in fail_open_outcomes:
+            reason = result.enrichment_headers.get("X-ACI-Fail-Open-Reason", result.outcome.value)
+            FAIL_OPEN_TOTAL.labels(reason=reason).inc()
+
+        if self.total_requests > 0:
+            FAIL_OPEN_RATE.set(self.total_fail_open / self.total_requests)
+
+        state_value = {
+            "closed": 0.0,
+            "half_open": 1.0,
+            "open": 2.0,
+        }.get(self.circuit_breaker.state, 0.0)
+        CIRCUIT_BREAKER_STATE.set(state_value)
+
+    @staticmethod
+    def _build_fail_open_headers(reason: FailOpenReason) -> dict[str, str]:
+        return {
+            "X-ACI-Fail-Open": "true",
+            "X-ACI-Fail-Open-Reason": reason.value,
+        }
+
+    @staticmethod
+    def _map_attribution_reason(method_used: str) -> str:
+        method = method_used.upper()
+        if method.startswith("R1"):
+            return "DIRECT_OWNER_MAPPING"
+        if method.startswith("R2"):
+            return "CI_PROVENANCE_MATCH"
+        if method.startswith("R3") or method.startswith("R4") or method.startswith("R5"):
+            return "HEURISTIC_MATCH"
+        if method.startswith("R6"):
+            return "GATEWAY_INHERITANCE"
+        return "UNKNOWN"
+
+    @staticmethod
+    def _build_advisory(
+        request: InterceptionRequest,
+        attribution: AttributionIndexEntry,
+        violations: list[PolicyEvaluationResult],
+    ) -> tuple[str, str]:
+        if (
+            attribution.approved_alternatives
+            and request.model not in attribution.approved_alternatives
+        ):
+            alt = attribution.approved_alternatives[0]
+            detail = f"Equivalent lower-cost alternative available: {alt}"
+            return ("SUGGEST_MODEL_DOWNGRADE", detail[:200])
+
+        token_violation = next(
+            (v for v in violations if v.policy_id in {"token_budget", "token_budget_input"}),
+            None,
+        )
+        if token_violation is not None:
+            return ("SUGGEST_TOKEN_CAP", token_violation.details[:200])
+
+        cost_violation = next((v for v in violations if v.policy_id == "cost_ceiling"), None)
+        if cost_violation is not None:
+            return ("SUGGEST_COST_CAP", cost_violation.details[:200])
+
+        return ("", "")
+
+    @staticmethod
+    def _should_downgrade_active_to_advisory(request: InterceptionRequest) -> bool:
+        env = str(request.metadata.get("environment", "")).strip().lower()
+        is_non_production = env in {"dev", "development", "test", "testing", "staging"}
+        has_semantic_guardrail = (
+            str(request.metadata.get("response_format_type", "")).strip().lower() == "json_object"
+            or bool(request.metadata.get("tools_present", False))
+            or bool(request.metadata.get("strict_json_schema", False))
+        )
+
+        if not is_non_production:
+            return True
+        return has_semantic_guardrail
+
+    @staticmethod
+    def _sanitize_request_headers(headers: dict[str, str]) -> dict[str, str]:
+        sanitized: dict[str, str] = {}
+        violation_detected = False
+        for key, value in headers.items():
+            header_name = key.lower()
+            lower_value = value.lower()
+
+            looks_like_email = "@" in value and "." in value
+            looks_sensitive = (
+                "api-key" in header_name
+                or "authorization" in header_name
+                or "prompt" in header_name
+                or "token" in header_name
+                or "bearer " in lower_value
+                or looks_like_email
+            )
+            looks_prompt_like = len(value) > 1024 and (" " in value or "\n" in value)
+            if looks_sensitive or looks_prompt_like:
+                violation_detected = True
+                continue
+            sanitized[key] = value
+
+        if violation_detected:
+            logger.warning("WARN_HEADER_POLICY_VIOLATION")
+
+        return sanitized
 
     @staticmethod
     def _resolve_workload_id(request: InterceptionRequest) -> str:
@@ -574,6 +973,11 @@ class FailOpenInterceptor:
             if normalized:
                 return normalized
         return ""
+
+    @staticmethod
+    def _resolve_tenant_id(request: InterceptionRequest) -> str:
+        """Resolve tenant identifier for emitted audit/shadow events."""
+        return str(request.metadata.get("tenant_id", "")).strip()
 
     async def _drain_shadow_publish(self, publish_result: Awaitable[bool]) -> None:
         """Best-effort async publish drain for fire-and-forget shadow events."""

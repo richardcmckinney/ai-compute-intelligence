@@ -6,7 +6,6 @@ on:
   pull_request:
     branches:
       - main
-      - codex/**
   workflow_dispatch:
   schedule:
     - cron: "22 8 * * 1"

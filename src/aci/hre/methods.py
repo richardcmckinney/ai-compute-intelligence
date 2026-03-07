@@ -124,8 +124,9 @@ class R2TemporalCorrelation:
         best_match: tuple[float, str, str] | None = None
         competing_count = 0
 
+        source_time = self._to_utc(event_time)
         for cand_time, cand_entity, cand_source in candidate_events:
-            delta = abs((event_time - cand_time).total_seconds())
+            delta = abs((source_time - self._to_utc(cand_time)).total_seconds())
             if delta <= self.max_window_seconds:
                 competing_count += 1
                 if best_match is None or delta < best_match[0]:
@@ -157,6 +158,12 @@ class R2TemporalCorrelation:
                 "source_system": source,
             },
         )
+
+    @staticmethod
+    def _to_utc(value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
 
 
 class R3NamingConvention:
@@ -316,6 +323,7 @@ class R5ServiceAccountResolution:
         code_owners: list[str],
         recent_users: list[tuple[str, datetime]],
         lookback: timedelta = timedelta(days=30),
+        reference_time: datetime | None = None,
     ) -> ReconciliationSignal | None:
         """
         Resolve a shared service account to its most likely owner.
@@ -323,12 +331,12 @@ class R5ServiceAccountResolution:
         Combines multiple weak signals: who deployed it most recently,
         who owns the code it runs, who used it most recently.
         """
-        now = datetime.now(UTC)
+        now = reference_time.astimezone(UTC) if reference_time is not None else datetime.now(UTC)
         scores: dict[str, float] = {}
 
         # Signal 1: Most recent deployer (strongest signal for service accounts).
         for owner, deploy_time in sorted(deployment_owners, key=lambda x: x[1], reverse=True):
-            if now - deploy_time <= lookback:
+            if now - self._to_utc(deploy_time) <= lookback:
                 scores[owner] = scores.get(owner, 0.0) + 0.35
                 break  # Only most recent deployer counts.
 
@@ -339,7 +347,7 @@ class R5ServiceAccountResolution:
         # Signal 3: Recent users (weak signal, many users may use shared accounts).
         recent_set = set()
         for user, use_time in recent_users:
-            if now - use_time <= lookback:
+            if now - self._to_utc(use_time) <= lookback:
                 recent_set.add(user)
         for user in recent_set:
             scores[user] = scores.get(user, 0.0) + 0.15 / max(1, len(recent_set))
@@ -370,6 +378,12 @@ class R5ServiceAccountResolution:
             },
         )
 
+    @staticmethod
+    def _to_utc(value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+
 
 class R6ProportionalAllocation:
     """
@@ -398,12 +412,13 @@ class R6ProportionalAllocation:
         if not known_users:
             return []
 
-        total_weight = sum(known_users.values())
+        positive_users = {team_id: weight for team_id, weight in known_users.items() if weight > 0}
+        total_weight = sum(positive_users.values())
         if total_weight <= 0:
             return []
 
         signals = []
-        for team_id, weight in known_users.items():
+        for team_id, weight in positive_users.items():
             proportion = weight / total_weight
             # Confidence is low and scales with how dominant one team is.
             # If one team accounts for 90% of usage, confidence is higher.
@@ -418,7 +433,7 @@ class R6ProportionalAllocation:
                     signals=(f"proportional:{team_id}:{proportion:.2f}",),
                     feature_values={
                         "allocation_weight": round(proportion, 3),
-                        "team_count": len(known_users),
+                        "team_count": len(positive_users),
                     },
                 )
             )

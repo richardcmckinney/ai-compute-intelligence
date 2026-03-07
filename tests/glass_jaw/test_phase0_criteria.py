@@ -20,7 +20,10 @@ sustained load test is run via the Locust load test configuration.
 from __future__ import annotations
 
 import asyncio
+import math
+import resource
 import time
+from typing import ClassVar
 
 import pytest
 
@@ -46,7 +49,7 @@ def _make_index_entry(workload_id: str) -> AttributionIndexEntry:
         method_used="R1",
         budget_remaining_usd=3000.0,
         budget_limit_usd=5000.0,
-        model_allowlist=["gpt-4o-mini", "gpt-4o", "claude-3-haiku"],
+        model_allowlist=["gpt-4o-mini", "gpt-4o", "gemini-1.5-flash"],
         equivalence_class_id="general-chat",
         approved_alternatives=["gpt-4o-mini"],
     )
@@ -76,13 +79,18 @@ class TestLatencyBudget:
     validate the latency characteristics at smaller scale.
     """
 
-    def setup_method(self) -> None:
-        self.store = AttributionIndexStore()
+    store: ClassVar[AttributionIndexStore]
+
+    @classmethod
+    def setup_class(cls) -> None:
+        cls.store = AttributionIndexStore()
         # Pre-populate with 10K entries to simulate realistic index size.
         for i in range(10_000):
-            self.store.materialize(_make_index_entry(f"service-{i}"))
+            cls.store.materialize(_make_index_entry(f"service-{i}"))
+
+    def setup_method(self) -> None:
         self.interceptor = FailOpenInterceptor(
-            self.store,
+            type(self).store,
             mode=DeploymentMode.ADVISORY,
         )
 
@@ -120,8 +128,9 @@ class TestLatencyBudget:
             )
             latencies.append((time.monotonic() - start) * 1000)
 
-        p50 = sorted(latencies)[500]
-        p99 = sorted(latencies)[990]
+        sorted_latencies = sorted(latencies)
+        p50 = sorted_latencies[math.ceil(0.50 * len(sorted_latencies)) - 1]
+        p99 = sorted_latencies[math.ceil(0.99 * len(sorted_latencies)) - 1]
 
         assert p99 < 15.0, f"P99={p99:.2f}ms exceeds 15ms budget"
         assert p50 < 5.0, f"P50={p50:.2f}ms is unexpectedly high"
@@ -145,7 +154,7 @@ class TestLatencyBudget:
 
         tasks = [timed_intercept(i) for i in range(100)]
         latencies = await asyncio.gather(*tasks)
-        p99 = sorted(latencies)[99]
+        p99 = sorted(latencies)[math.ceil(0.99 * len(latencies)) - 1]
         assert p99 < 15.0, f"Concurrent P99={p99:.2f}ms"
 
 
@@ -185,7 +194,7 @@ class TestZeroFailures:
     @pytest.mark.asyncio
     async def test_no_exceptions_mixed_traffic(self) -> None:
         """Mixed hits and misses: zero exceptions across 2,000 requests."""
-        errors = 0
+        failures: list[str] = []
         for i in range(2000):
             try:
                 svc = f"svc-{i % 200}"  # Half will miss.
@@ -198,9 +207,9 @@ class TestZeroFailures:
                         estimated_cost_usd=0.003,
                     )
                 )
-            except Exception:
-                errors += 1
-        assert errors == 0, f"{errors} request failures out of 2,000"
+            except Exception as exc:
+                failures.append(f"request {i}: {exc!r}")
+        assert not failures, f"request failures encountered: {failures[:3]}"
 
 
 # ---------------------------------------------------------------------------
@@ -235,15 +244,19 @@ class TestMemoryFootprint:
                 method_used="R1",
                 budget_remaining_usd=5000.0 - (i % 100) * 50,
                 budget_limit_usd=5000.0,
-                model_allowlist=["gpt-4o-mini", "gpt-4o", "claude-3-haiku"],
+                model_allowlist=["gpt-4o-mini", "gpt-4o", "gemini-1.5-flash"],
             )
             store.materialize(entry)
 
-        current, peak = tracemalloc.get_traced_memory()
+        _, peak = tracemalloc.get_traced_memory()
         tracemalloc.stop()
 
         peak_mb = peak / 1024 / 1024
+        rss_raw = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        rss_mb = rss_raw / (1024 * 1024) if rss_raw > 10_000_000 else rss_raw / 1024
+
         assert peak_mb < 256, f"Peak memory {peak_mb:.1f}MB exceeds 256MB limit"
+        assert rss_mb < 256, f"RSS memory {rss_mb:.1f}MB exceeds 256MB limit"
         # Realistically should be well under 100MB for 10K entries.
         assert peak_mb < 100, f"Peak memory {peak_mb:.1f}MB (expected < 100MB for 10K entries)"
 
@@ -272,7 +285,11 @@ class TestFailOpenChaos:
 
         # Set impossibly tight timeout.
         config = InterceptorConfig(timeout_ms=0)
-        interceptor = FailOpenInterceptor(self.store, config, DeploymentMode.ADVISORY)
+        interceptor = FailOpenInterceptor(
+            self.store,
+            config=config,
+            mode=DeploymentMode.ADVISORY,
+        )
 
         result = await interceptor.intercept(_make_request())
         # Should be FAIL_OPEN (timeout) or ENRICHED if it somehow completed.

@@ -8,7 +8,7 @@ and utility factories for common test scenarios.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
@@ -25,9 +25,7 @@ from aci.models.events import DomainEvent, EventType, InferenceEvent
 from aci.models.graph import EdgeProvenance, EdgeType, GraphEdge, GraphNode, NodeType
 from aci.policy.engine import PolicyEngine
 from aci.trac.calculator import TRACCalculator
-
-NOW = datetime(2026, 2, 8, 14, 23, 0, tzinfo=UTC)
-
+from tests.time_constants import FIXED_NOW
 
 # ---------------------------------------------------------------------------
 # Configuration fixtures
@@ -87,7 +85,7 @@ def equivalence_verifier(config: PlatformConfig) -> EquivalenceVerifier:
         EquivalenceClass(
             class_id="customer-support-chat",
             name="Customer Support Chat",
-            approved_models=["gpt-4o", "gpt-4o-mini", "claude-3-haiku"],
+            approved_models=["gpt-4o", "gpt-4o-mini", "gemini-1.5-flash"],
             use_case="Customer-facing chat support",
         )
     )
@@ -161,7 +159,7 @@ def fraud_team_graph(graph_store: GraphStore) -> GraphStore:
                 to_id=to_id,
                 confidence=1.0,
                 weight=1.0,
-                valid_from=NOW - timedelta(days=30),
+                valid_from=FIXED_NOW - timedelta(days=30),
                 provenance=EdgeProvenance(source="cicd", method="R1"),
             )
         )
@@ -184,9 +182,9 @@ def sample_index_entry() -> AttributionIndexEntry:
         method_used="R1",
         budget_remaining_usd=1800.0,
         budget_limit_usd=5000.0,
-        model_allowlist=["gpt-4o-mini", "gpt-4o", "claude-3-haiku"],
+        model_allowlist=["gpt-4o-mini", "gpt-4o", "gemini-1.5-flash"],
         equivalence_class_id="customer-support-chat",
-        approved_alternatives=["gpt-4o-mini", "claude-3-haiku"],
+        approved_alternatives=["gpt-4o-mini", "gemini-1.5-flash"],
     )
 
 
@@ -209,6 +207,7 @@ def make_inference_event(
     model: str = "gpt-4o",
     cost_usd: float = 4.80,
     tokens: int = 1_200_000,
+    output_tokens: int = 32_000,
     service_name: str = "fraud-v2",
 ) -> DomainEvent:
     """Create a sample inference event matching Section 13.1."""
@@ -221,11 +220,11 @@ def make_inference_event(
             cloud_resource_arn=f"arn:aws:sagemaker:us-east-1:...:endpoint/{service_name}",
             region="us-east-1",
             input_tokens=tokens,
-            output_tokens=0,
+            output_tokens=output_tokens,
             cost_usd=cost_usd,
             service_name=service_name,
         ).model_dump(),
-        event_time=NOW,
+        event_time=FIXED_NOW,
         source="aws-bedrock",
         idempotency_key=f"test:{service_name}:1",
         tenant_id="test-tenant",

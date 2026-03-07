@@ -9,7 +9,7 @@ Each test corresponds to a worked example from Section 13 of the patent spec.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
@@ -29,8 +29,7 @@ from aci.models.attribution import AttributionIndexEntry
 from aci.models.events import DomainEvent, EventType
 from aci.models.graph import EdgeProvenance, EdgeType, GraphEdge, GraphNode, NodeType
 from aci.trac.calculator import TRACCalculator
-
-NOW = datetime(2026, 2, 8, 14, 23, 0, tzinfo=UTC)
+from tests.time_constants import FIXED_NOW
 
 
 @pytest.mark.integration
@@ -54,9 +53,9 @@ class TestFullPipelineExample131:
         self.calibration = CalibrationEngine(self.config.confidence)
         self.trac = TRACCalculator(self.config.trac, self.config.confidence)
         self.interceptor = FailOpenInterceptor(
-            self.index,
-            self.config.interceptor,
-            DeploymentMode.ADVISORY,
+            index=self.index,
+            config=self.config.interceptor,
+            mode=DeploymentMode.ADVISORY,
         )
         self._build_graph()
 
@@ -85,7 +84,7 @@ class TestFullPipelineExample131:
         for n in nodes:
             self.graph.upsert_node(n)
 
-        t0 = NOW - timedelta(days=7)
+        t0 = FIXED_NOW - timedelta(days=7)
         prov = EdgeProvenance(source="cicd", method="R1")
         for from_id, to_id, etype in [
             ("deploy:fraud-42", "endpoint:fraud-v2", EdgeType.TRIGGERS),
@@ -114,7 +113,7 @@ class TestFullPipelineExample131:
         result = self.hre.resolve(
             entity_id="endpoint:fraud-v2",
             entity_type="inference_endpoint",
-            event_time=NOW,
+            event_time=FIXED_NOW,
             context=ctx,
         )
 
@@ -127,7 +126,7 @@ class TestFullPipelineExample131:
         ctx = ReconciliationContext()
         ctx.identity_mappings = {"endpoint:fraud-v2": "team:ML-Fraud"}
 
-        result = self.hre.resolve("endpoint:fraud-v2", "endpoint", NOW, ctx)
+        result = self.hre.resolve("endpoint:fraud-v2", "endpoint", FIXED_NOW, ctx)
         entry = self.materializer.materialize_attribution(result)
 
         assert entry.workload_id == "endpoint:fraud-v2"
@@ -168,8 +167,8 @@ class TestFullPipelineExample131:
 
         assert result.outcome == InterceptionOutcome.ENRICHED
         assert result.elapsed_ms < 50
-        assert result.enrichment_headers["X-Attribution-Team"] == "ML-Fraud"
-        assert "X-Budget-Remaining-Pct" in result.enrichment_headers
+        assert result.enrichment_headers["X-ACI-Team-Name"] == "ML-Fraud"
+        assert "X-ACI-Budget-Remaining-Pct" in result.enrichment_headers
 
     def test_trac_computation(self) -> None:
         """TRAC computes correctly for the Section 13.1 inference event."""
@@ -210,9 +209,9 @@ class TestFullPipelineExample132:
                 method_used="R1",
                 budget_remaining_usd=1800.0,
                 budget_limit_usd=5000.0,
-                model_allowlist=["gpt-4o-mini", "gpt-4o", "claude-3-haiku"],
+                model_allowlist=["gpt-4o-mini", "gpt-4o", "gemini-1.5-flash"],
                 equivalence_class_id="customer-support-chat",
-                approved_alternatives=["gpt-4o-mini", "claude-3-haiku"],
+                approved_alternatives=["gpt-4o-mini", "gemini-1.5-flash"],
             )
         )
 
@@ -233,11 +232,11 @@ class TestFullPipelineExample132:
         assert result.elapsed_ms < 50
         assert result.attribution is not None
         assert result.attribution.team_name == "CS-Platform"
-        assert result.enrichment_headers["X-Budget-Remaining-Pct"] == "36"
+        assert result.enrichment_headers["X-ACI-Budget-Remaining-Pct"] == "36"
 
     @pytest.mark.asyncio
     async def test_fail_open_on_unknown_workload(self) -> None:
-        """Unknown workload: interceptor fails open, logs shadow event."""
+        """Unknown workload: interceptor fails open without falsely claiming event publish."""
         request = InterceptionRequest(
             request_id="req-unknown",
             model="gpt-4o",
@@ -248,7 +247,7 @@ class TestFullPipelineExample132:
         result = await self.interceptor.intercept(request)
 
         assert result.outcome == InterceptionOutcome.FAIL_OPEN
-        assert result.shadow_event_logged is True
+        assert result.shadow_event_logged is False
 
 
 @pytest.mark.integration
@@ -268,7 +267,7 @@ class TestFullPipelineExample133:
         """R2 + R3 produce combined confidence (provisional range)."""
         ctx = ReconciliationContext()
         ctx.temporal_events = [
-            (NOW - timedelta(minutes=5), "person:asmith@company.com", "jupyter"),
+            (FIXED_NOW - timedelta(minutes=5), "person:asmith@company.com", "jupyter"),
         ]
         ctx.naming_patterns = {
             "team:NLP-Research": ["nlp-experiment", "nlp-pipeline", "nlp-eval"],
@@ -278,7 +277,7 @@ class TestFullPipelineExample133:
         result = self.hre.resolve(
             entity_id="nlp-experiment-7",
             entity_type="sagemaker_endpoint",
-            event_time=NOW,
+            event_time=FIXED_NOW,
             context=ctx,
         )
 
@@ -299,11 +298,11 @@ class TestFullPipelineExample133:
         """Explanation artifact contains all required fields per Section 5.4."""
         ctx = ReconciliationContext()
         ctx.temporal_events = [
-            (NOW - timedelta(minutes=5), "person:asmith@company.com", "jupyter"),
+            (FIXED_NOW - timedelta(minutes=5), "person:asmith@company.com", "jupyter"),
         ]
         ctx.naming_patterns = {"team:NLP-Research": ["nlp-experiment"]}
 
-        result = self.hre.resolve("nlp-experiment-7", "endpoint", NOW, ctx)
+        result = self.hre.resolve("nlp-experiment-7", "endpoint", FIXED_NOW, ctx)
 
         explanation = result.explanation
         assert explanation is not None
@@ -331,7 +330,7 @@ class TestEventSourcingReplay:
             event_type=EventType.INFERENCE_REQUEST,
             subject_id="req-1",
             attributes={"model": "gpt-4o", "provider": "openai"},
-            event_time=NOW,
+            event_time=FIXED_NOW,
             source="test",
             idempotency_key="test:req-1",
             tenant_id="test",
@@ -358,7 +357,7 @@ class TestEventSourcingReplay:
                     "service": "bedrock",
                     "cost_usd": i * 10.0,
                 },
-                event_time=NOW - timedelta(hours=5 - i),
+                event_time=FIXED_NOW - timedelta(hours=5 - i),
                 source="test",
                 idempotency_key=f"test:item-{i}",
                 tenant_id="test",
@@ -366,8 +365,8 @@ class TestEventSourcingReplay:
             await self.bus.publish(event)
 
         replayed = self.bus.replay(
-            from_time=NOW - timedelta(hours=3),
-            to_time=NOW,
+            from_time=FIXED_NOW - timedelta(hours=3),
+            to_time=FIXED_NOW,
         )
 
         assert len(replayed) == 3

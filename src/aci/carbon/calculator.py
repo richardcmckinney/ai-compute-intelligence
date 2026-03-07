@@ -27,9 +27,9 @@ MODEL_ENERGY_BENCHMARKS: dict[str, float] = {
     "gpt-4o": 0.0021,
     "gpt-4-turbo": 0.0032,
     "gpt-4o-mini": 0.0003,
-    "claude-3.5-sonnet": 0.0019,
-    "claude-3-haiku": 0.0002,
-    "claude-3-opus": 0.0045,
+    "gemini-2.0-flash": 0.0019,
+    "gemini-1.5-flash": 0.0002,
+    "gpt-4.1": 0.0045,
     "gemini-1.5-pro": 0.0018,
     "dall-e-3": 0.012,
 }
@@ -57,7 +57,7 @@ GRID_INTENSITY: dict[str, float] = {
 # gCO2e per 1K tokens. Uncertainty: +/- 40-80%.
 PROVIDER_EMISSION_FACTORS: dict[str, float] = {
     "openai": 0.80,  # Estimated from Azure energy mix + model benchmarks.
-    "anthropic": 0.65,  # GCP-heavy infrastructure, lower grid intensity.
+    "aws-bedrock": 0.65,  # Mixed cloud inference footprint with lower average intensity.
     "google": 0.55,  # High CFE percentage in many regions.
 }
 

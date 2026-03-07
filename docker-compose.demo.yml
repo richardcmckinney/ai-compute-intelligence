@@ -1,0 +1,28 @@
+services:
+  aci:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      ACI_ENVIRONMENT: demo
+      ACI_TENANT_ID: demo-local
+      ACI_RUNTIME_ROLE: all
+      ACI_UVICORN_WORKERS: "1"
+      ACI_GRAPH_BACKEND: memory
+      ACI_EVENT_BUS_BACKEND: memory
+      ACI_INDEX_BACKEND: memory
+      ACI_INTERCEPTOR_CIRCUIT_STATE_BACKEND: local
+      ACI_AUTH_ENABLED: "true"
+      ACI_AUTH_ALLOW_DEV_BYPASS: "true"
+      ACI_AUTH_JWT_ALGORITHM: HS256
+      ACI_AUTH_JWT_ISSUER: aci-control-plane
+      ACI_AUTH_JWT_AUDIENCE: aci-api
+      ACI_AUTH_JWT_HS256_SECRET: dev-only-secret
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s

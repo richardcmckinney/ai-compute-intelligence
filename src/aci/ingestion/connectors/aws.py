@@ -11,6 +11,8 @@ how they are obtained without code changes, and fallback when missing.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import UTC, datetime
 from typing import Any
 
@@ -42,13 +44,29 @@ class AWSBillingConnector:
 
     def transform_cur_record(self, record: dict[str, Any]) -> DomainEvent:
         """Transform a single AWS CUR record into a DomainEvent."""
+        account_id = str(record.get("lineItem/UsageAccountId", "")).strip()
+        service = str(record.get("lineItem/ProductCode", "")).strip()
+        if not account_id or not service:
+            raise ValueError("CUR record missing required account_id or service")
+
+        raw_cost = record.get("lineItem/UnblendedCost")
+        if raw_cost is None:
+            raise ValueError("CUR record missing required lineItem/UnblendedCost")
+
+        line_item_id = str(record.get("identity/LineItemId", "")).strip()
+        idempotency_key = (
+            f"aws-cur:{line_item_id}"
+            if line_item_id
+            else f"aws-cur-fallback:{self._stable_record_fingerprint(record)}"
+        )
+
         billing = BillingLineItem(
             cloud_provider="aws",
-            account_id=record.get("lineItem/UsageAccountId", ""),
-            service=record.get("lineItem/ProductCode", ""),
+            account_id=account_id,
+            service=service,
             resource_arn=record.get("lineItem/ResourceId", ""),
             region=record.get("product/region", ""),
-            cost_usd=float(record.get("lineItem/UnblendedCost", 0)),
+            cost_usd=float(raw_cost),
             usage_quantity=float(record.get("lineItem/UsageAmount", 0)),
             usage_unit=record.get("pricing/unit", ""),
             tags=self._extract_tags(record),
@@ -60,7 +78,7 @@ class AWSBillingConnector:
             attributes=billing.model_dump(),
             event_time=datetime.now(UTC),
             source="aws-cur",
-            idempotency_key=f"aws-cur:{record.get('identity/LineItemId', '')}",
+            idempotency_key=idempotency_key,
             tenant_id=self.tenant_id,
         )
 
@@ -73,6 +91,19 @@ class AWSBillingConnector:
                 tag_name = key.replace("resourceTags/user:", "")
                 tags[tag_name] = str(value)
         return tags
+
+    @staticmethod
+    def _stable_record_fingerprint(record: dict[str, Any]) -> str:
+        material = {
+            "usage_account_id": str(record.get("lineItem/UsageAccountId", "")),
+            "service": str(record.get("lineItem/ProductCode", "")),
+            "resource_id": str(record.get("lineItem/ResourceId", "")),
+            "usage_start": str(record.get("lineItem/UsageStartDate", "")),
+            "usage_end": str(record.get("lineItem/UsageEndDate", "")),
+            "cost": str(record.get("lineItem/UnblendedCost", "")),
+        }
+        payload = json.dumps(material, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return hashlib.sha256(payload).hexdigest()[:24]
 
 
 class AWSCloudTrailConnector:
@@ -100,6 +131,12 @@ class AWSCloudTrailConnector:
 
     def _transform_resource_event(self, trail_event: dict[str, Any]) -> DomainEvent:
         identity = trail_event.get("userIdentity", {})
+        event_id = str(trail_event.get("eventID", "")).strip()
+        idempotency_key = (
+            f"cloudtrail:{event_id}"
+            if event_id
+            else f"cloudtrail-fallback:{self._stable_trail_fingerprint(trail_event)}"
+        )
         return DomainEvent(
             event_type=EventType.RESOURCE_CREATED,
             subject_id=trail_event.get("responseElements", {}).get("endpointArn", ""),
@@ -110,16 +147,20 @@ class AWSCloudTrailConnector:
                 "source_ip": trail_event.get("sourceIPAddress", ""),
                 "region": trail_event.get("awsRegion", ""),
             },
-            event_time=datetime.fromisoformat(
-                trail_event.get("eventTime", datetime.now(UTC).isoformat())
-            ),
+            event_time=self._parse_event_time(trail_event.get("eventTime")),
             source="aws-cloudtrail",
-            idempotency_key=f"cloudtrail:{trail_event.get('eventID', '')}",
+            idempotency_key=idempotency_key,
             tenant_id=self.tenant_id,
         )
 
     def _transform_identity_event(self, trail_event: dict[str, Any]) -> DomainEvent:
         identity = trail_event.get("userIdentity", {})
+        event_id = str(trail_event.get("eventID", "")).strip()
+        idempotency_key = (
+            f"cloudtrail:{event_id}"
+            if event_id
+            else f"cloudtrail-fallback:{self._stable_trail_fingerprint(trail_event)}"
+        )
         return DomainEvent(
             event_type=EventType.IDENTITY_LOGIN,
             subject_id=identity.get("arn", ""),
@@ -127,15 +168,74 @@ class AWSCloudTrailConnector:
                 "principal_id": identity.get("principalId", ""),
                 "account_id": identity.get("accountId", ""),
                 "user_name": identity.get("userName", ""),
-                "session_context": trail_event.get("requestParameters", {}),
+                "session_context": self._build_safe_session_context(trail_event),
             },
-            event_time=datetime.fromisoformat(
-                trail_event.get("eventTime", datetime.now(UTC).isoformat())
-            ),
+            event_time=self._parse_event_time(trail_event.get("eventTime")),
             source="aws-cloudtrail",
-            idempotency_key=f"cloudtrail:{trail_event.get('eventID', '')}",
+            idempotency_key=idempotency_key,
             tenant_id=self.tenant_id,
         )
+
+    @staticmethod
+    def _parse_event_time(raw_time: object) -> datetime:
+        if isinstance(raw_time, datetime):
+            if raw_time.tzinfo is None or raw_time.utcoffset() is None:
+                return raw_time.replace(tzinfo=UTC)
+            return raw_time.astimezone(UTC)
+
+        if not raw_time:
+            return datetime.now(UTC)
+
+        value = str(raw_time).strip()
+        if value.endswith("Z"):
+            value = f"{value[:-1]}+00:00"
+
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            logger.warning("aws_connector.invalid_event_time", raw_time=value)
+            return datetime.now(UTC)
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            return parsed.replace(tzinfo=UTC)
+        return parsed.astimezone(UTC)
+
+    @staticmethod
+    def _build_safe_session_context(trail_event: dict[str, Any]) -> dict[str, Any]:
+        request_params = trail_event.get("requestParameters")
+        if not isinstance(request_params, dict):
+            return {}
+
+        allowed_keys = {
+            "roleArn",
+            "roleSessionName",
+            "externalId",
+            "sourceIdentity",
+            "durationSeconds",
+            "serialNumber",
+            "mfaAuthenticated",
+        }
+        context: dict[str, Any] = {}
+        for key in allowed_keys:
+            if key not in request_params:
+                continue
+            value = request_params.get(key)
+            if isinstance(value, (str, int, float, bool)):
+                context[key] = value
+
+        return context
+
+    @staticmethod
+    def _stable_trail_fingerprint(trail_event: dict[str, Any]) -> str:
+        identity = trail_event.get("userIdentity", {})
+        material = {
+            "event_name": str(trail_event.get("eventName", "")),
+            "event_time": str(trail_event.get("eventTime", "")),
+            "source_ip": str(trail_event.get("sourceIPAddress", "")),
+            "identity_arn": str(identity.get("arn", "")),
+            "identity_principal_id": str(identity.get("principalId", "")),
+        }
+        payload = json.dumps(material, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return hashlib.sha256(payload).hexdigest()[:24]
 
 
 class BedrockTelemetryConnector:
@@ -167,9 +267,7 @@ class BedrockTelemetryConnector:
             event_type=EventType.INFERENCE_REQUEST,
             subject_id=inference.request_id,
             attributes=inference.model_dump(),
-            event_time=datetime.fromisoformat(
-                log_entry.get("timestamp", datetime.now(UTC).isoformat())
-            ),
+            event_time=AWSCloudTrailConnector._parse_event_time(log_entry.get("timestamp")),
             source="aws-bedrock",
             idempotency_key=f"bedrock:{inference.request_id}",
             tenant_id=self.tenant_id,
@@ -186,8 +284,8 @@ class BedrockTelemetryConnector:
 
         # Example rates (per 1K tokens).
         rates: dict[str, tuple[float, float]] = {
-            "anthropic.claude-3-5-sonnet": (0.003, 0.015),
-            "anthropic.claude-3-haiku": (0.00025, 0.00125),
+            "amazon.nova-pro-v1:0": (0.003, 0.015),
+            "amazon.nova-lite-v1:0": (0.00025, 0.00125),
             "amazon.titan-text-express": (0.0002, 0.0006),
         }
 

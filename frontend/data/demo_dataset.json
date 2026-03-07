@@ -1,0 +1,849 @@
+{
+  "meta": {
+    "tenant": "NovaTech Industries",
+    "environment": "staging",
+    "runtime_role": "all",
+    "default_mode": "advisory",
+    "period_label": "February 2026",
+    "watermark": "SIMULATED DATA"
+  },
+  "overview": {
+    "attribution_coverage_pct": 87.4,
+    "total_spend_usd": 746800,
+    "requests_30d": 5821041,
+    "spend_trend_k_usd": [
+      { "month": "Aug", "total": 412, "attributed": 298, "captured": 0 },
+      { "month": "Sep", "total": 489, "attributed": 367, "captured": 0 },
+      { "month": "Oct", "total": 567, "attributed": 453, "captured": 0 },
+      { "month": "Nov", "total": 634, "attributed": 521, "captured": 12 },
+      { "month": "Dec", "total": 718, "attributed": 646, "captured": 39 },
+      { "month": "Jan", "total": 791, "attributed": 735, "captured": 67 },
+      { "month": "Feb", "total": 847, "attributed": 813, "captured": 112 }
+    ],
+    "data_freshness": [
+      { "name": "Ingestion latency p95", "target": "< 60s", "actual": "41s", "status": "green" },
+      { "name": "Graph refresh", "target": "<= 60m", "actual": "34m", "status": "green" },
+      { "name": "Index materialization", "target": "<= 5m", "actual": "2m 18s", "status": "green" },
+      { "name": "Policy bundle propagation", "target": "<= 3m", "actual": "1m 12s", "status": "green" }
+    ]
+  },
+  "teams": [
+    {
+      "id": "plat",
+      "name": "Platform Engineering",
+      "lead": "Sarah Chen",
+      "headcount": 42,
+      "spend_usd": 218400,
+      "previous_spend_usd": 198200,
+      "budget_usd": 250000,
+      "optimization_potential_usd": 31200,
+      "optimization_pct": 14.3,
+      "top_workload": "Code Intelligence",
+      "top_models": ["gemini-2.0-flash", "gpt-4-turbo", "gemini-1.5-flash"],
+      "cloud": "AWS",
+      "trac_usd": 226900
+    },
+    {
+      "id": "ml",
+      "name": "ML Engineering",
+      "lead": "David Kim",
+      "headcount": 28,
+      "spend_usd": 187600,
+      "previous_spend_usd": 172100,
+      "budget_usd": 200000,
+      "optimization_potential_usd": 42800,
+      "optimization_pct": 22.8,
+      "top_workload": "Training Pipeline",
+      "top_models": ["gpt-4o", "gemini-2.0-flash", "gemini-1.5-pro"],
+      "cloud": "GCP",
+      "trac_usd": 198400
+    },
+    {
+      "id": "prod",
+      "name": "Product",
+      "lead": "Maria Santos",
+      "headcount": 35,
+      "spend_usd": 134200,
+      "previous_spend_usd": 108900,
+      "budget_usd": 150000,
+      "optimization_potential_usd": 18900,
+      "optimization_pct": 14.1,
+      "top_workload": "Customer Copilot",
+      "top_models": ["gpt-4o-mini", "gemini-1.5-flash", "gpt-4-turbo"],
+      "cloud": "AWS",
+      "trac_usd": 139800
+    },
+    {
+      "id": "data",
+      "name": "Data Science",
+      "lead": "James Walsh",
+      "headcount": 22,
+      "spend_usd": 98700,
+      "previous_spend_usd": 87400,
+      "budget_usd": 120000,
+      "optimization_potential_usd": 15200,
+      "optimization_pct": 15.4,
+      "top_workload": "Analytics Engine",
+      "top_models": ["gpt-4o", "gemini-2.0-flash"],
+      "cloud": "Azure",
+      "trac_usd": 104200
+    },
+    {
+      "id": "cust",
+      "name": "Customer Engineering",
+      "lead": "Priya Patel",
+      "headcount": 18,
+      "spend_usd": 76300,
+      "previous_spend_usd": 71200,
+      "budget_usd": 90000,
+      "optimization_potential_usd": 22100,
+      "optimization_pct": 29.0,
+      "top_workload": "Support Automation",
+      "top_models": ["gemini-2.0-flash", "gpt-4o-mini"],
+      "cloud": "AWS",
+      "trac_usd": 82100
+    },
+    {
+      "id": "sec",
+      "name": "Security",
+      "lead": "Alex Okafor",
+      "headcount": 15,
+      "spend_usd": 52400,
+      "previous_spend_usd": 48700,
+      "budget_usd": 70000,
+      "optimization_potential_usd": 8400,
+      "optimization_pct": 16.0,
+      "top_workload": "Threat Analysis",
+      "top_models": ["gpt-4-turbo", "gemini-2.0-flash"],
+      "cloud": "Azure",
+      "trac_usd": 55900
+    },
+    {
+      "id": "res",
+      "name": "Research",
+      "lead": "Dr. Lin Zhang",
+      "headcount": 12,
+      "spend_usd": 43800,
+      "previous_spend_usd": 39200,
+      "budget_usd": 60000,
+      "optimization_potential_usd": 6900,
+      "optimization_pct": 15.8,
+      "top_workload": "Literature Analysis",
+      "top_models": ["gpt-4.1", "gpt-4o"],
+      "cloud": "GCP",
+      "trac_usd": 49200
+    },
+    {
+      "id": "mkt",
+      "name": "Marketing",
+      "lead": "Rachel Green",
+      "headcount": 20,
+      "spend_usd": 35600,
+      "previous_spend_usd": 28400,
+      "budget_usd": 45000,
+      "optimization_potential_usd": 9200,
+      "optimization_pct": 25.8,
+      "top_workload": "Content Generation",
+      "top_models": ["gpt-4o-mini", "dall-e-3"],
+      "cloud": "AWS",
+      "trac_usd": 38100
+    }
+  ],
+  "models": [
+    {
+      "name": "gpt-4o",
+      "provider": "OpenAI",
+      "spend_usd": 234100,
+      "requests": 4820000,
+      "latency_p95_ms": 1240,
+      "cost_per_1k_tokens_usd": 0.048,
+      "teams": 6,
+      "trend_pct": 12.4,
+      "optimization_potential_usd": 28400,
+      "cost_variance": "1.0x"
+    },
+    {
+      "name": "gemini-2.0-flash",
+      "provider": "Google",
+      "spend_usd": 198700,
+      "requests": 3640000,
+      "latency_p95_ms": 980,
+      "cost_per_1k_tokens_usd": 0.054,
+      "teams": 7,
+      "trend_pct": 18.7,
+      "optimization_potential_usd": 22100,
+      "cost_variance": "1.0x"
+    },
+    {
+      "name": "gpt-4-turbo",
+      "provider": "OpenAI",
+      "spend_usd": 142300,
+      "requests": 1980000,
+      "latency_p95_ms": 1680,
+      "cost_per_1k_tokens_usd": 0.072,
+      "teams": 4,
+      "trend_pct": -3.2,
+      "optimization_potential_usd": 38200,
+      "cost_variance": "1.5x"
+    },
+    {
+      "name": "gpt-4o-mini",
+      "provider": "OpenAI",
+      "spend_usd": 87200,
+      "requests": 12400000,
+      "latency_p95_ms": 420,
+      "cost_per_1k_tokens_usd": 0.007,
+      "teams": 5,
+      "trend_pct": 34.1,
+      "optimization_potential_usd": 12800,
+      "cost_variance": "0.14x"
+    },
+    {
+      "name": "gemini-1.5-flash",
+      "provider": "Google",
+      "spend_usd": 64800,
+      "requests": 18200000,
+      "latency_p95_ms": 280,
+      "cost_per_1k_tokens_usd": 0.004,
+      "teams": 4,
+      "trend_pct": 22.3,
+      "optimization_potential_usd": 8900,
+      "cost_variance": "0.07x"
+    },
+    {
+      "name": "gemini-1.5-pro",
+      "provider": "Google",
+      "spend_usd": 52100,
+      "requests": 2100000,
+      "latency_p95_ms": 1120,
+      "cost_per_1k_tokens_usd": 0.025,
+      "teams": 3,
+      "trend_pct": 41.2,
+      "optimization_potential_usd": 7200,
+      "cost_variance": "0.5x"
+    },
+    {
+      "name": "gpt-4.1",
+      "provider": "OpenAI",
+      "spend_usd": 38400,
+      "requests": 420000,
+      "latency_p95_ms": 2800,
+      "cost_per_1k_tokens_usd": 0.091,
+      "teams": 2,
+      "trend_pct": -8.4,
+      "optimization_potential_usd": 14600,
+      "cost_variance": "1.9x"
+    },
+    {
+      "name": "dall-e-3",
+      "provider": "OpenAI",
+      "spend_usd": 29400,
+      "requests": 680000,
+      "latency_p95_ms": 4200,
+      "cost_per_1k_tokens_usd": 0.043,
+      "teams": 2,
+      "trend_pct": 5.8,
+      "optimization_potential_usd": 4100,
+      "cost_variance": "N/A"
+    }
+  ],
+  "optimization_categories": [
+    {
+      "name": "Model over-provisioning",
+      "value_usd": 62800,
+      "description": "High-cost models used where validated lower-cost equivalents exist",
+      "color": "#ef4545"
+    },
+    {
+      "name": "Duplicate requests",
+      "value_usd": 29100,
+      "description": "Repeated inference payloads without semantic-cache policy",
+      "color": "#9166f0"
+    },
+    {
+      "name": "Staging and dev sprawl",
+      "value_usd": 22800,
+      "description": "Non-production workloads consuming production-tier models",
+      "color": "#eda82e"
+    },
+    {
+      "name": "Prompt inefficiency",
+      "value_usd": 13900,
+      "description": "Token inflation from verbose templates and repeated context",
+      "color": "#4a8cf7"
+    },
+    {
+      "name": "Batch mispricing",
+      "value_usd": 6300,
+      "description": "Eligible deferred workloads still running on on-demand pricing",
+      "color": "#17bec8"
+    }
+  ],
+  "attribution_requests": [
+    {
+      "id": "req_7f3a9b2e",
+      "time": "14:23:17",
+      "model": "gpt-4o",
+      "input_tokens": 3847,
+      "output_tokens": 512,
+      "cost_usd": 0.0234,
+      "latency_ms": 11,
+      "mode": "Advisory",
+      "confidence": 0.96,
+      "trac_usd": 0.0248,
+      "cost_breakdown": {
+        "billed_cost_usd": 0.0234,
+        "confidence_risk_premium_usd": 0.0014,
+        "total_usd": 0.0248
+      },
+      "enrichment": {
+        "alternate_model": "gpt-4o-mini (equivalence verified, -72% cost)",
+        "headers": "X-ACI-Est-Cost-USD: 0.0234 | X-ACI-Alternative-Model: gpt-4o-mini | X-ACI-Confidence: 0.96"
+      },
+      "chain": [
+        {
+          "layer": "Model Invocation",
+          "value": "gpt-4o (OpenAI) via AWS Bedrock",
+          "source": "Cloud telemetry",
+          "method": "R1: direct match",
+          "confidence": 1.0
+        },
+        {
+          "layer": "Service Attribution",
+          "value": "customer-copilot-prod (EKS us-east-1)",
+          "source": "CI/CD deployment run #4821",
+          "method": "R1: direct match",
+          "confidence": 1.0
+        },
+        {
+          "layer": "Code Ownership",
+          "value": "copilot-service/src/chains/support.py",
+          "source": "GitHub CODEOWNERS",
+          "method": "R1: direct match",
+          "confidence": 0.98
+        },
+        {
+          "layer": "Identity Resolution",
+          "value": "maria.santos@novatech.com",
+          "source": "Okta SSO and service-account map",
+          "method": "R2: temporal correlation",
+          "confidence": 0.94
+        },
+        {
+          "layer": "Org Hierarchy",
+          "value": "Product Engineering",
+          "source": "HR hierarchy sync",
+          "method": "R1: direct match",
+          "confidence": 0.96
+        },
+        {
+          "layer": "Budget Attribution",
+          "value": "CC-4200 | GL 6120-AI-Services",
+          "source": "ERP cost center map",
+          "method": "R1: direct match",
+          "confidence": 0.96
+        }
+      ]
+    },
+    {
+      "id": "req_2c8d4e1f",
+      "time": "14:23:14",
+      "model": "gemini-2.0-flash",
+      "input_tokens": 8421,
+      "output_tokens": 1204,
+      "cost_usd": 0.0583,
+      "latency_ms": 8,
+      "mode": "Advisory",
+      "confidence": 0.91,
+      "trac_usd": 0.0637,
+      "cost_breakdown": {
+        "billed_cost_usd": 0.0583,
+        "confidence_risk_premium_usd": 0.0054,
+        "total_usd": 0.0637
+      },
+      "enrichment": {
+        "alternate_model": "No verified equivalent for this code-review workload",
+        "headers": "X-ACI-Est-Cost-USD: 0.0583 | X-ACI-Confidence: 0.91"
+      },
+      "chain": [
+        {
+          "layer": "Model Invocation",
+          "value": "gemini-2.0-flash (Google) direct API",
+          "source": "API gateway logs",
+          "method": "R1: direct match",
+          "confidence": 1.0
+        },
+        {
+          "layer": "Service Attribution",
+          "value": "code-intel-prod (EKS us-west-2)",
+          "source": "CI/CD run #1247",
+          "method": "R1: direct match",
+          "confidence": 1.0
+        },
+        {
+          "layer": "Code Ownership",
+          "value": "code-intelligence/src/review/patch.py",
+          "source": "GitHub commit lineage",
+          "method": "R2: temporal correlation",
+          "confidence": 0.89
+        },
+        {
+          "layer": "Identity Resolution",
+          "value": "sarah.chen@novatech.com",
+          "source": "GitHub actor and Okta identity join",
+          "method": "R2: temporal correlation",
+          "confidence": 0.86
+        },
+        {
+          "layer": "Org Hierarchy",
+          "value": "Platform Engineering",
+          "source": "Org hierarchy graph",
+          "method": "R1: direct match",
+          "confidence": 0.94
+        },
+        {
+          "layer": "Budget Attribution",
+          "value": "CC-3100 | GL 6120-AI-Services",
+          "source": "ERP allocation policy",
+          "method": "R1: direct match",
+          "confidence": 0.91
+        }
+      ]
+    },
+    {
+      "id": "req_e4f21a8c",
+      "time": "14:23:11",
+      "model": "gpt-4o-mini",
+      "input_tokens": 1284,
+      "output_tokens": 89,
+      "cost_usd": 0.0009,
+      "latency_ms": 4,
+      "mode": "Advisory",
+      "confidence": 0.72,
+      "trac_usd": 0.0013,
+      "cost_breakdown": {
+        "billed_cost_usd": 0.0009,
+        "confidence_risk_premium_usd": 0.0004,
+        "total_usd": 0.0013
+      },
+      "enrichment": {
+        "alternate_model": "Already on lowest-cost verified model",
+        "headers": "X-ACI-Est-Cost-USD: 0.0009 | X-ACI-Confidence: 0.72 | X-ACI-Confidence-Flag: provisional"
+      },
+      "chain": [
+        {
+          "layer": "Model Invocation",
+          "value": "gpt-4o-mini (OpenAI) via Azure OpenAI",
+          "source": "Azure monitor",
+          "method": "R1: direct match",
+          "confidence": 1.0
+        },
+        {
+          "layer": "Service Attribution",
+          "value": "support-bot-staging",
+          "source": "Kubernetes metadata",
+          "method": "R1: direct match",
+          "confidence": 1.0
+        },
+        {
+          "layer": "Code Ownership",
+          "value": "support-bot/src/router.ts",
+          "source": "Git path ownership",
+          "method": "R1: direct match",
+          "confidence": 0.93
+        },
+        {
+          "layer": "Identity Resolution",
+          "value": "svc.support@novatech.com",
+          "source": "Service identity map",
+          "method": "R3: naming heuristic",
+          "confidence": 0.69
+        },
+        {
+          "layer": "Org Hierarchy",
+          "value": "Customer Engineering",
+          "source": "Org hierarchy map",
+          "method": "R1: direct match",
+          "confidence": 0.75
+        },
+        {
+          "layer": "Budget Attribution",
+          "value": "CC-2800 | GL 6120-AI-Services",
+          "source": "Cost center policy",
+          "method": "R2: temporal correlation",
+          "confidence": 0.72
+        }
+      ]
+    }
+  ],
+  "interventions": [
+    {
+      "id": "INT-401",
+      "title": "Route fallback traffic from gpt-4o to gpt-4o-mini",
+      "type": "Model Routing",
+      "status": "recommended",
+      "savings_usd_month": 31200,
+      "confidence_pct": 94,
+      "risk": "low",
+      "team": "Product",
+      "detail": "2.1M fallback requests analyzed. 97.3% quality parity in Mode 2a shadow evaluation.",
+      "equivalence_mode": "Empirical (Mode 2a)",
+      "equivalence_status": "verified",
+      "methodology": {
+        "category": "Model over-provisioning",
+        "threshold": "Triggered by 2.1M monthly fallback requests and a 72% cost differential",
+        "rule": "Route candidate when cost differential > 50% and equivalence confidence >= 0.93"
+      }
+    },
+    {
+      "id": "INT-402",
+      "title": "Apply input-token guardrail to analytics-batch",
+      "type": "Token Governance",
+      "status": "review",
+      "savings_usd_month": 14800,
+      "confidence_pct": 89,
+      "risk": "medium",
+      "team": "ML Engineering",
+      "detail": "95th percentile prompt size is 4.2K. Capping at 3.5K removes outlier spend without quality regression.",
+      "equivalence_mode": "Policy floor",
+      "equivalence_status": "conditional",
+      "methodology": {
+        "category": "Prompt inefficiency",
+        "threshold": "Triggered when p95 input tokens exceed policy floor by more than 20%",
+        "rule": "Recommend prompt compaction and gate at 3.5K tokens when p95 > 4K"
+      }
+    },
+    {
+      "id": "INT-403",
+      "title": "Enable semantic cache for deterministic support prompts",
+      "type": "Semantic Cache",
+      "status": "implemented",
+      "savings_usd_month": 10200,
+      "confidence_pct": 92,
+      "risk": "low",
+      "team": "Customer Engineering",
+      "detail": "Cache hit rate stabilized at 38% with no measurable quality drop for deterministic FAQ patterns.",
+      "equivalence_mode": "Empirical (Mode 2a)",
+      "equivalence_status": "verified",
+      "methodology": {
+        "category": "Duplicate requests",
+        "threshold": "Triggered by > 30% semantically duplicate prompts in a 7-day window",
+        "rule": "Recommend semantic cache when duplicate ratio exceeds 0.30 and latency budget remains under 20ms"
+      }
+    },
+    {
+      "id": "INT-404",
+      "title": "Restrict staging model allowlist to low-cost equivalents",
+      "type": "Policy Enforcement",
+      "status": "recommended",
+      "savings_usd_month": 22800,
+      "confidence_pct": 87,
+      "risk": "medium",
+      "team": "Platform Engineering",
+      "detail": "Staging traffic is using production-tier models for integration tests without quality benefit.",
+      "equivalence_mode": "Policy (Mode 1)",
+      "equivalence_status": "policy",
+      "methodology": {
+        "category": "Staging and dev sprawl",
+        "threshold": "Triggered by > 25% of staging requests using frontier-tier models",
+        "rule": "Apply staging allowlist when non-production frontier use exceeds 20%"
+      }
+    },
+    {
+      "id": "INT-405",
+      "title": "Batch low-priority nightly summarization jobs",
+      "type": "Workload Scheduling",
+      "status": "recommended",
+      "savings_usd_month": 17400,
+      "confidence_pct": 84,
+      "risk": "medium",
+      "team": "Data Science",
+      "detail": "Deferred execution window unlocks lower-priced provider batch lanes for non-latency workloads.",
+      "equivalence_mode": "Not required",
+      "equivalence_status": "n/a",
+      "methodology": {
+        "category": "Batch mispricing",
+        "threshold": "Triggered when > 70% of jobs run off-peak but still on on-demand pricing",
+        "rule": "Recommend batch lane migration when latency tolerance > 30 minutes"
+      }
+    },
+    {
+      "id": "INT-406",
+      "title": "Prompt template compaction for secops-assistant",
+      "type": "Prompt Optimization",
+      "status": "review",
+      "savings_usd_month": 9200,
+      "confidence_pct": 90,
+      "risk": "low",
+      "team": "Security",
+      "detail": "Removes repetitive context boilerplate while preserving the incident triage rubric and output structure.",
+      "equivalence_mode": "Empirical (Mode 2a)",
+      "equivalence_status": "verified",
+      "methodology": {
+        "category": "Prompt inefficiency",
+        "threshold": "Triggered by > 15% template token redundancy across repeated flows",
+        "rule": "Recommend template minimization when token redundancy > 0.15 and confidence >= 0.85"
+      }
+    }
+  ],
+  "governance": {
+    "modes": [
+      {
+        "key": "passive",
+        "label": "Passive Observation",
+        "description": "Sidecar observer mode. Logs telemetry and attribution evidence only.",
+        "impact": "No request shaping or routing. Zero operational risk."
+      },
+      {
+        "key": "advisory",
+        "label": "Advisory",
+        "description": "Enriches request/response path with X-ACI cost and attribution headers.",
+        "impact": "Applications decide whether to act on optimization guidance."
+      },
+      {
+        "key": "active",
+        "label": "Active",
+        "description": "Allows controlled routing and policy gates with explicit workload opt-in.",
+        "impact": "Requires equivalence verification, fail-open circuit breaker, and policy controls."
+      }
+    ],
+    "policies": [
+      {
+        "policy_id": "POL-600",
+        "name": "Production Model Allowlist",
+        "status": "active",
+        "scope": "All production workloads",
+        "mode": "active",
+        "rule": "Only approved models may execute in production.",
+        "violations_7d": 0
+      },
+      {
+        "policy_id": "POL-601",
+        "name": "Staging Cost Ceiling",
+        "status": "active",
+        "scope": "Team + environment",
+        "mode": "advisory",
+        "rule": "Alert when staging spend trajectory exceeds configured monthly budget.",
+        "violations_7d": 6
+      },
+      {
+        "policy_id": "POL-602",
+        "name": "Token Size Guardrail",
+        "status": "active",
+        "scope": "Per request",
+        "mode": "active",
+        "rule": "Enforce max input token envelope for high-cost workloads.",
+        "violations_7d": 17
+      },
+      {
+        "policy_id": "POL-603",
+        "name": "High-Cost Model Approval Gate",
+        "status": "active",
+        "scope": "Pre-deploy",
+        "mode": "active",
+        "rule": "CI checks projected monthly cost before merge and requires approver override.",
+        "violations_7d": 3
+      },
+      {
+        "policy_id": "POL-605",
+        "name": "Attribution Confidence Floor",
+        "status": "monitoring",
+        "scope": "Global",
+        "mode": "advisory",
+        "rule": "Flag requests below confidence floor and exclude from automated chargeback.",
+        "violations_7d": 7
+      }
+    ],
+    "fail_open_matrix": [
+      {
+        "test_id": "FO-01",
+        "scenario": "Timeout budget breached",
+        "expected": "Fail-open forward and timeout telemetry"
+      },
+      {
+        "test_id": "FO-02",
+        "scenario": "Policy engine crash",
+        "expected": "Fail-open forward and error counter"
+      },
+      {
+        "test_id": "FO-03",
+        "scenario": "Index miss",
+        "expected": "Pass-through plus shadow warming event"
+      },
+      {
+        "test_id": "FO-04",
+        "scenario": "Malformed payload",
+        "expected": "Skip enrichment; upstream handles error"
+      },
+      {
+        "test_id": "FO-10",
+        "scenario": "90% memory pressure",
+        "expected": "Fail-open and bounded index eviction telemetry"
+      }
+    ],
+    "trust_boundary_summary": [
+      "Raw prompts and outputs are never persisted by the platform.",
+      "The interceptor hot path reads only local cache and index data; no synchronous external calls.",
+      "Deployment runs inside the customer trust boundary with explicit egress control policies.",
+      "Any hot-path fault degrades to unmodified pass-through via fail-open semantics.",
+      "Every policy decision emits immutable audit telemetry."
+    ]
+  },
+  "glossary": [
+    {
+      "term": "Attribution Coverage",
+      "aka": null,
+      "definition": "Percentage of total AI spend attributed to a team, project, or cost center above the configured confidence floor."
+    },
+    {
+      "term": "Confidence Floor",
+      "aka": null,
+      "definition": "Minimum attribution confidence required for automated chargebacks. Default shown in this demo is 0.80."
+    },
+    {
+      "term": "Fail-Open",
+      "aka": null,
+      "definition": "Safety guarantee that platform failure never blocks workload execution; requests pass through unmodified on error or timeout."
+    },
+    {
+      "term": "Interceptor",
+      "aka": null,
+      "definition": "Decision-time component in the request path that enriches requests with cost and attribution context under strict latency budgets."
+    },
+    {
+      "term": "Advisory Mode",
+      "aka": "Deployment Mode",
+      "definition": "Operating mode where the platform only provides guidance headers and recommendations without automatic request mutation."
+    },
+    {
+      "term": "Active Mode",
+      "aka": "Deployment Mode",
+      "definition": "Opt-in mode allowing controlled model routing or policy gates when equivalence checks and safety conditions are met."
+    },
+    {
+      "term": "Heuristic Reconciliation Engine",
+      "aka": "HRE",
+      "definition": "Engine that combines billing, CI/CD, source control, identity, org hierarchy, and ERP signals into confidence-calibrated attribution chains."
+    },
+    {
+      "term": "Capability Equivalence Verification",
+      "aka": null,
+      "definition": "Verification process confirming that a lower-cost model delivers equivalent quality for a specific workload before routing changes are allowed."
+    },
+    {
+      "term": "Optimization Category",
+      "aka": null,
+      "definition": "Predefined class of addressable spend such as model over-provisioning, duplicate requests, or staging sprawl."
+    },
+    {
+      "term": "Threshold Condition",
+      "aka": null,
+      "definition": "Specific data signal or signal combination that triggers an optimization recommendation."
+    },
+    {
+      "term": "Conditional Rule Set",
+      "aka": null,
+      "definition": "Collection of deterministic if-then rules mapping observed patterns to recommendation categories."
+    },
+    {
+      "term": "TRAC",
+      "aka": "Total Risk-Adjusted Cost",
+      "definition": "Billed cost plus confidence risk premium, used to compare workloads with different attribution certainty."
+    }
+  ],
+  "faq": [
+    {
+      "category": "Deployment and Safety",
+      "items": [
+        {
+          "question": "How long does initial deployment take?",
+          "answer": "Most teams reach Passive Observation in 1-2 days, then move to Advisory once identity and CI/CD connectors are validated."
+        },
+        {
+          "question": "Will the platform block requests by default?",
+          "answer": "No. Default posture is fail-open and advisory. Any gating behavior requires explicit workload opt-in."
+        },
+        {
+          "question": "Is this demo using customer production data?",
+          "answer": "No. The entire dataset is synthetic and continuously watermarked as simulated."
+        }
+      ]
+    },
+    {
+      "category": "How Recommendations Work",
+      "items": [
+        {
+          "question": "How does the platform identify optimization opportunities?",
+          "answer": "The platform applies predefined optimization categories and threshold conditions to ingested billing, CI/CD, source-control, identity, and org data. When rule conditions are met, a recommendation is emitted with confidence, risk, and estimated savings."
+        },
+        {
+          "question": "What are the dimensions of optimization?",
+          "answer": "The recommendation system evaluates model routing efficiency, prompt/token efficiency, duplicate request behavior, staging and development sprawl, and workload scheduling and pricing opportunities."
+        },
+        {
+          "question": "Are recommendations fixed or adaptive?",
+          "answer": "The current production-ready posture is deterministic and rule-based with configurable thresholds, prioritizing explainability and auditability. Dynamic discovery is a roadmap extension."
+        }
+      ]
+    },
+    {
+      "category": "Optimization and Governance",
+      "items": [
+        {
+          "question": "Can teams override recommendations?",
+          "answer": "Yes. Every recommendation can be approved, kept in review, or dismissed. Decisions are session-persistent in this demo and represented in savings metrics."
+        },
+        {
+          "question": "How is policy evaluation surfaced?",
+          "answer": "Policy outcomes are available in governance views and event logs, including expected action and fail-open behavior under fault scenarios."
+        },
+        {
+          "question": "How are integration notifications used?",
+          "answer": "Slack, email, and webhook channels carry policy violations, budget alerts, and intervention status updates for operational workflows."
+        },
+        {
+          "question": "How robust are configuration controls?",
+          "answer": "Governance controls are explicit and mode-aware, with fail-open behavior under fault conditions, bounded policy checks, and auditable lifecycle transitions for recommendations."
+        }
+      ]
+    }
+  ],
+  "demo_scenarios": {
+    "enriched": {
+      "label": "Scenario A: Enriched",
+      "payload": {
+        "model": "gpt-4o-mini",
+        "provider": "openai",
+        "service_name": "customer-support-bot",
+        "input_tokens": 600,
+        "max_tokens": 350,
+        "estimated_cost_usd": 0.0032,
+        "environment": "staging"
+      }
+    },
+    "soft_stop": {
+      "label": "Scenario B: Soft Stop",
+      "payload": {
+        "model": "gpt-4o",
+        "provider": "openai",
+        "service_name": "analytics-batch",
+        "input_tokens": 5200,
+        "max_tokens": 1400,
+        "estimated_cost_usd": 0.014,
+        "environment": "staging"
+      }
+    },
+    "fail_open": {
+      "label": "Scenario C: Fail-Open",
+      "payload": {
+        "model": "gpt-4o",
+        "provider": "openai",
+        "service_name": "unknown-service",
+        "input_tokens": 400,
+        "max_tokens": 300,
+        "estimated_cost_usd": 0.004,
+        "environment": "staging"
+      }
+    }
+  }
+}

@@ -123,6 +123,22 @@ class PolicyEngine:
                 global_tokens = token_budget
         return global_tokens
 
+    def get_cost_ceiling(self, team_id: str) -> float | None:
+        """Get per-request cost ceiling constraint for a team."""
+        global_ceiling: float | None = None
+        for policy in self.policies.values():
+            if policy.policy_type != PolicyType.COST_CEILING or not policy.enabled:
+                continue
+            ceiling = policy.parameters.get("max_request_cost_usd")
+            if ceiling is None:
+                continue
+            resolved = float(ceiling)
+            if self._policy_matches_team(policy, team_id):
+                return resolved
+            if policy.scope == "global":
+                global_ceiling = resolved
+        return global_ceiling
+
     def _evaluate_single(
         self,
         policy: PolicyDefinition,

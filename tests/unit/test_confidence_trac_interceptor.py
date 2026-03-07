@@ -4,9 +4,13 @@ Unit tests for confidence calibration, TRAC calculator, and fail-open intercepto
 
 from __future__ import annotations
 
+import time
+from typing import TYPE_CHECKING
+
 import pytest
 
 from aci.confidence.calibration import CalibrationEngine
+from aci.config import InterceptorConfig
 from aci.index.materializer import AttributionIndexStore
 from aci.interceptor.gateway import (
     DeploymentMode,
@@ -16,7 +20,11 @@ from aci.interceptor.gateway import (
 )
 from aci.models.attribution import AttributionIndexEntry
 from aci.models.confidence import ConfidenceTier, GroundTruthLabel
+from aci.models.events import DomainEvent, EventType
 from aci.trac.calculator import TRACCalculator, TRACWorkloadInput
+
+if TYPE_CHECKING:
+    from aci.models.carbon import PolicyEvaluationResult
 
 # ---------------------------------------------------------------------------
 # Confidence Calibration
@@ -234,7 +242,7 @@ class TestFailOpenInterceptor:
         """Cache miss: request proceeds unmodified (fail-open)."""
         result = await self.interceptor.intercept(self._make_request())
         assert result.outcome == InterceptionOutcome.FAIL_OPEN
-        assert result.shadow_event_logged is True
+        assert result.shadow_event_logged is False
 
     @pytest.mark.asyncio
     async def test_advisory_enrichment(self) -> None:
@@ -242,9 +250,19 @@ class TestFailOpenInterceptor:
         self.store.materialize(self._make_index_entry())
         result = await self.interceptor.intercept(self._make_request())
         assert result.outcome == InterceptionOutcome.ENRICHED
-        assert "X-Attribution-Team" in result.enrichment_headers
-        assert result.enrichment_headers["X-Attribution-Team"] == "CS-Platform"
+        assert "X-ACI-Attribution-Owner-Id" in result.enrichment_headers
+        assert result.enrichment_headers["X-ACI-Attribution-Owner-Id"] == "team-cs"
+        assert result.enrichment_headers["X-ACI-Team-Name"] == "CS-Platform"
         assert result.redirect_model is None
+
+    @pytest.mark.asyncio
+    async def test_advisory_enrichment_includes_price_snapshot_header(self) -> None:
+        self.store.materialize(self._make_index_entry())
+        request = self._make_request()
+        request.metadata["price_snapshot_id"] = "pricing-demo-123"
+        result = await self.interceptor.intercept(request)
+        assert result.outcome == InterceptionOutcome.ENRICHED
+        assert result.enrichment_headers["X-ACI-Price-Snapshot-Id"] == "pricing-demo-123"
 
     @pytest.mark.asyncio
     async def test_passive_mode_no_enrichment(self) -> None:
@@ -295,7 +313,7 @@ class TestFailOpenInterceptor:
             method_used="R1",
             budget_remaining_usd=1800.0,
             budget_limit_usd=5000.0,
-            model_allowlist=["gpt-4o-mini", "gpt-4o", "claude-3-haiku"],
+            model_allowlist=["gpt-4o-mini", "gpt-4o", "gemini-1.5-flash"],
         )
         self.store.materialize(entry)
 
@@ -310,14 +328,193 @@ class TestFailOpenInterceptor:
         result = await self.interceptor.intercept(request)
         assert result.outcome == InterceptionOutcome.ENRICHED
         assert result.redirect_model is None
-        assert "X-Budget-Remaining-Pct" in result.enrichment_headers
-        assert result.enrichment_headers["X-Budget-Remaining-Pct"] == "36"
+        assert "X-ACI-Budget-Remaining-Pct" in result.enrichment_headers
+        assert result.enrichment_headers["X-ACI-Budget-Remaining-Pct"] == "36"
 
     @pytest.mark.asyncio
     async def test_circuit_breaker_opens_after_failures(self) -> None:
         """Circuit breaker opens after consecutive failures."""
-        for _ in range(6):
-            await self.interceptor.intercept(self._make_request("missing"))
+        self.store.materialize(self._make_index_entry())
+        for _ in range(5):
+            self.interceptor.circuit_breaker.record_failure()
 
-        result = await self.interceptor.intercept(self._make_request("missing"))
-        assert result.outcome in (InterceptionOutcome.FAIL_OPEN, InterceptionOutcome.CIRCUIT_OPEN)
+        assert self.interceptor.circuit_breaker.state == "open"
+
+        result = await self.interceptor.intercept(self._make_request())
+        assert result.outcome == InterceptionOutcome.CIRCUIT_OPEN
+
+    @pytest.mark.asyncio
+    async def test_active_gate_requires_higher_confidence_than_shape(self) -> None:
+        entry = AttributionIndexEntry(
+            workload_id="gate-confidence-svc",
+            team_id="team-gov",
+            team_name="Governance",
+            cost_center_id="CC-2200",
+            confidence=0.92,
+            confidence_tier="chargeback_ready",
+            method_used="R2",
+            token_budget_input=100,
+        )
+        self.store.materialize(entry)
+
+        active = FailOpenInterceptor(
+            self.store,
+            config=InterceptorConfig(
+                active_lite_min_confidence=0.90,
+                active_lite_gate_min_confidence=0.95,
+            ),
+            mode=DeploymentMode.ACTIVE,
+        )
+        request = InterceptionRequest(
+            request_id="req-gate-confidence",
+            model="gpt-4o",
+            service_name="gate-confidence-svc",
+            input_tokens=250,
+            metadata={"environment": "staging"},
+        )
+
+        result = await active.intercept(request)
+        assert result.outcome == InterceptionOutcome.SOFT_STOPPED
+
+    @pytest.mark.asyncio
+    async def test_cost_ceiling_violation_surfaces_policy_result(self) -> None:
+        self.store.materialize(
+            AttributionIndexEntry(
+                workload_id="svc-cost-cap",
+                team_id="team-finops",
+                team_name="FinOps",
+                cost_center_id="CC-4400",
+                confidence=0.94,
+                confidence_tier="chargeback_ready",
+                method_used="R2",
+                cost_ceiling_per_request_usd=0.001,
+            )
+        )
+        request = InterceptionRequest(
+            request_id="req-cost-cap",
+            model="gpt-4o",
+            service_name="svc-cost-cap",
+            estimated_cost_usd=0.01,
+        )
+
+        result = await self.interceptor.intercept(request)
+        assert result.outcome == InterceptionOutcome.SOFT_STOPPED
+        assert any(v.policy_id == "cost_ceiling" for v in result.policy_results)
+
+    @pytest.mark.asyncio
+    async def test_policy_timeout_triggers_fail_open(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self.store.materialize(self._make_index_entry("svc-policy-timeout"))
+        interceptor = FailOpenInterceptor(
+            self.store,
+            config=InterceptorConfig(policy_timeout_ms=1),
+            mode=DeploymentMode.ADVISORY,
+        )
+
+        def delayed_eval(
+            request: InterceptionRequest,
+            attribution: AttributionIndexEntry,
+        ) -> list[PolicyEvaluationResult]:
+            del request, attribution
+            time.sleep(0.005)
+            return []
+
+        monkeypatch.setattr(interceptor, "_evaluate_policies", delayed_eval)
+        request = self._make_request(service_name="svc-policy-timeout")
+        result = await interceptor.intercept(request)
+
+        assert result.outcome == InterceptionOutcome.TIMEOUT
+        assert result.enrichment_headers["X-ACI-Fail-Open-Reason"] == "POLICY_TIMEOUT"
+
+
+class _RecordingEventBus:
+    def __init__(self) -> None:
+        self.events: list[DomainEvent] = []
+
+    async def publish(self, event: DomainEvent) -> bool:
+        self.events.append(event)
+        return True
+
+
+@pytest.mark.asyncio
+async def test_active_intervention_emits_audit_event() -> None:
+    store = AttributionIndexStore()
+    store.materialize(
+        AttributionIndexEntry(
+            workload_id="svc-route",
+            team_id="team-opt",
+            team_name="Optimization",
+            cost_center_id="CC-3300",
+            confidence=0.96,
+            confidence_tier="chargeback_ready",
+            method_used="R1",
+            approved_alternatives=["gpt-4o-mini"],
+        )
+    )
+    bus = _RecordingEventBus()
+    interceptor = FailOpenInterceptor(
+        store,
+        mode=DeploymentMode.ACTIVE,
+        event_bus=bus,
+    )
+    request = InterceptionRequest(
+        request_id="req-route-1",
+        model="gpt-4o",
+        service_name="svc-route",
+        estimated_cost_usd=0.0042,
+        metadata={"environment": "staging"},
+    )
+
+    result = await interceptor.intercept(request)
+    await interceptor.shutdown()
+    assert result.outcome == InterceptionOutcome.REDIRECTED
+    assert result.redirect_model == "gpt-4o-mini"
+    assert len(bus.events) == 2
+    event_types = {event.event_type for event in bus.events}
+    assert EventType.POLICY_EVALUATED in event_types
+    assert EventType.INTERVENTION_APPLIED in event_types
+    intervention_event = next(
+        event for event in bus.events if event.event_type == EventType.INTERVENTION_APPLIED
+    )
+    assert intervention_event.attributes["action_type"] == "MODEL_ROUTE"
+    assert intervention_event.attributes["original_model"] == "gpt-4o"
+    assert intervention_event.attributes["new_model"] == "gpt-4o-mini"
+
+
+@pytest.mark.asyncio
+async def test_policy_evaluation_emits_audit_event() -> None:
+    store = AttributionIndexStore()
+    store.materialize(
+        AttributionIndexEntry(
+            workload_id="svc-policy-audit",
+            team_id="team-audit",
+            team_name="Audit",
+            cost_center_id="CC-5500",
+            confidence=0.91,
+            confidence_tier="chargeback_ready",
+            method_used="R2",
+            model_allowlist=["gpt-4o-mini"],
+        )
+    )
+    bus = _RecordingEventBus()
+    interceptor = FailOpenInterceptor(
+        store,
+        mode=DeploymentMode.ADVISORY,
+        event_bus=bus,
+    )
+    request = InterceptionRequest(
+        request_id="req-policy-audit",
+        model="gpt-4o",
+        service_name="svc-policy-audit",
+        metadata={"environment": "staging", "tenant_id": "tenant-alpha"},
+    )
+
+    result = await interceptor.intercept(request)
+    await interceptor.shutdown()
+
+    assert result.outcome == InterceptionOutcome.SOFT_STOPPED
+    policy_event = next(
+        event for event in bus.events if event.event_type == EventType.POLICY_EVALUATED
+    )
+    assert policy_event.tenant_id == "tenant-alpha"
+    assert policy_event.attributes["violation_count"] == 1
+    assert policy_event.attributes["violated_policy_ids"] == ["model_allowlist"]

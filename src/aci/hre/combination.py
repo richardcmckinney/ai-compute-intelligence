@@ -73,15 +73,17 @@ def combine_evidence(
     if config is None:
         config = CombinationConfig()
 
-    if not signals:
+    bounded_signals = [(method, max(0.0, min(1.0, conf))) for method, conf in signals]
+
+    if not bounded_signals:
         return EvidenceCombinationResult(
             combined_confidence=0.0,
             individual_confidences=[],
         )
 
     # Single signal: no combination needed, still apply cap.
-    if len(signals) == 1:
-        method, conf = signals[0]
+    if len(bounded_signals) == 1:
+        method, conf = bounded_signals[0]
         capped_conf = min(config.cap, conf)
         return EvidenceCombinationResult(
             combined_confidence=capped_conf,
@@ -105,11 +107,11 @@ def combine_evidence(
     penalties: list[DependencyPenalty] = []
     weights: dict[str, float] = {}
 
-    for method, _confidence in signals:
+    for method, _confidence in bounded_signals:
         weights[method] = 1.0  # Start fully independent.
 
-    for i, (method_a, _) in enumerate(signals):
-        for j, (method_b, _) in enumerate(signals):
+    for i, (method_a, _) in enumerate(bounded_signals):
+        for j, (method_b, _) in enumerate(bounded_signals):
             if j <= i:
                 continue
 
@@ -119,7 +121,7 @@ def combine_evidence(
             discount = correlations.get(pair) or correlations.get(pair_rev)
             if discount is not None:
                 # Apply dependency discount to the weaker signal.
-                if signals[i][1] <= signals[j][1]:
+                if bounded_signals[i][1] <= bounded_signals[j][1]:
                     weights[method_a] = min(weights[method_a], discount)
                 else:
                     weights[method_b] = min(weights[method_b], discount)
@@ -139,7 +141,7 @@ def combine_evidence(
     # false certainty, but does not penalize the common two-signal case.
     # Dependency penalties (Step 1) handle correlated pairs regardless
     # of position, preventing double-penalization.
-    sorted_signals = sorted(signals, key=lambda x: x[1], reverse=True)
+    sorted_signals = sorted(bounded_signals, key=lambda x: x[1], reverse=True)
     diminishing_multipliers: list[float] = []
     for idx in range(len(sorted_signals)):
         if idx < 2:
@@ -156,7 +158,7 @@ def combine_evidence(
     for idx, (method, conf) in enumerate(sorted_signals):
         w = weights.get(method, 1.0)
         d = diminishing_multipliers[idx]
-        effective_conf = conf * w * d
+        effective_conf = min(1.0, max(0.0, conf * w * d))
         product_term *= 1.0 - effective_conf
 
         individual.append(
@@ -177,7 +179,7 @@ def combine_evidence(
         individual_confidences=individual,
         dependency_penalties_applied=penalties,
         capped=capped,
-        diminishing_returns_applied=len(signals) > 1,
+        diminishing_returns_applied=len(bounded_signals) > 2,
     )
 
 

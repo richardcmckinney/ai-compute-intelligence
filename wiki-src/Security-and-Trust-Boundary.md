@@ -19,7 +19,7 @@ Security issues should be reported privately using GitHub Security Advisories.
 
 Policy details are documented in `/SECURITY.md`.
 
-## YC Diligence Perspective
+## Technical Diligence Perspective
 Security posture is intentionally conservative:
 - explicit threat surface reduction,
 - predictable CI controls,

@@ -180,6 +180,7 @@ class HeuristicReconciliationEngine:
             context.deployment_owners,
             context.code_owners,
             context.recent_users,
+            reference_time=event_time,
         )
         if r5_signal is not None:
             probabilistic_signals.append(r5_signal)

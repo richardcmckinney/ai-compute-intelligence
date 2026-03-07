@@ -146,6 +146,8 @@ class CircuitBreaker:
         self._reset_timeout_s = reset_timeout_s
         self._half_open_max_probes = half_open_max_probes
         self._state_store = state_store or LocalCircuitStateStore()
+        self._fallback_lock = threading.RLock()
+        self._fallback_state = CircuitBreakerState()
         self._safe_mutate(lambda _state: None)
 
     @property
@@ -304,9 +306,14 @@ class CircuitBreaker:
         mutator: Callable[[CircuitBreakerState], None],
     ) -> CircuitBreakerState:
         try:
-            return self._state_store.mutate(mutator)
+            state = self._state_store.mutate(mutator)
+            with self._fallback_lock:
+                self._fallback_state = CircuitBreakerState(**asdict(state))
+            return state
         except RedisError as exc:
             logger.warning("circuit_breaker.state_mutation_failed", error=str(exc))
-            fallback_state = CircuitBreakerState()
-            mutator(fallback_state)
-            return fallback_state
+            with self._fallback_lock:
+                degraded_state = CircuitBreakerState(**asdict(self._fallback_state))
+                mutator(degraded_state)
+                self._fallback_state = CircuitBreakerState(**asdict(degraded_state))
+                return CircuitBreakerState(**asdict(degraded_state))

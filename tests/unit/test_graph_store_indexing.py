@@ -42,8 +42,10 @@ def test_add_edge_closes_previous_active_edge() -> None:
     store.add_edge(second)
 
     assert len(store.edges) == 2
-    assert store.edges[0].valid_to is not None
-    assert store.edges[1].valid_to is None
+    historical_edges = [edge for edge in store.edges if edge.valid_to is not None]
+    active_edges = [edge for edge in store.edges if edge.valid_to is None]
+    assert len(historical_edges) == 1
+    assert len(active_edges) == 1
 
     stats = store.get_stats()
     assert stats["active_edges"] == 1

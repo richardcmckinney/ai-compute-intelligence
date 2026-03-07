@@ -13,8 +13,11 @@ build/
 coverage.xml
 htmlcov/
 .env
+.env.*
+!.env.example
 .venv/
 venv/
 *.log
 uv.lock
 results/
+.benchmarks/

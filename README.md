@@ -1,228 +1,231 @@
 # AI Compute Intelligence (ACI)
 
-Application-level cost, carbon, and confidence attribution for enterprise AI workloads.
+Decision-time AI cost governance platform with calibrated attribution, policy enforcement, and fail-open interception.
 
-## What This Repository Delivers
+## Why This Exists
 
-Cloud bills report spend at account/service granularity, not at the workload/team/owner granularity required for accurate chargeback and policy decisions. ACI addresses that gap with a deploy-in-customer-VPC platform that:
+Enterprise AI spend is visible at cloud-account granularity but usually not attributable to the team/workload level needed for governance, chargeback, and intervention. ACI closes that gap by combining:
 
-- Ingests multi-source telemetry as immutable domain events.
-- Reconciles identity/workload relationships with calibrated confidence.
-- Computes attribution and TRAC (`cost + carbon + uncertainty premium`).
-- Serves a precomputed O(1) attribution index for decision-time interception.
-- Preserves application safety with strict fail-open behavior.
+- Immutable multi-source event ingestion.
+- Heuristic reconciliation with calibrated confidence.
+- Materialized O(1) attribution index for hot-path decisions.
+- Safe interception with strict fail-open semantics.
 
-## Current Maturity (v0.2.0)
+## Demo First (Recommended)
 
-Implemented and enforced in code:
+### Run locally (30-second path)
 
-- Schema-validated ingest (`/v1/events/ingest`, `/v1/events/ingest/batch`) with bounded batch size and caller rate limits.
-- Durable Kafka event-bus mode with DLQ routing, consumer lag metrics, and Redis-backed idempotency TTL.
-- Tenant-scoped deduplication keys.
-- Graph traversal/index paths bounded to avoid combinatorial blowups.
-- Redis-backed options for attribution index durability and distributed circuit-breaker state.
-- JWT auth on `/v1/*` routes with issuer/audience/scope/tenant validation.
-- Runtime-role separation (`all`, `gateway`, `processor`) for topology isolation.
-- Kubernetes baseline hardening: non-root, dropped Linux capabilities, read-only root filesystem, probes, PDBs, and network policies.
+Prerequisites:
 
-## Architecture
+- Python `3.12+`
+- `bash`
+
+```bash
+./scripts/run_demo.sh
+```
+
+Open the demo:
+
+- `http://localhost:8000/platform/`
+
+If port `8000` is occupied:
+
+```bash
+ACI_DEMO_PORT=8010 ./scripts/run_demo.sh
+```
+
+Then open `http://localhost:8010/platform/`.
+
+`./scripts/run_demo.sh` launches the explicit `demo` profile:
+
+- single worker
+- in-memory graph/event/index backends
+- deterministic startup seeding
+- auth bypass enabled only for the demo profile
+
+The dashboard and attribution controls are populated on startup. Use **Bootstrap Demo Data**
+only if you want to reset the demo state during a walkthrough.
+
+In the UI:
+
+1. Open **Execution Stream** from the top bar.
+2. Click **Run Full Sequence**.
+3. Inspect the **Latest Request/Response Payload** and **Log Stream** panels in the drawer.
+4. Navigate the left rail across:
+   - Overview
+   - Attribution
+   - Models
+   - Teams
+   - Interventions
+   - Governance
+   - Forecasting
+   - Integrations
+   - Glossary
+   - FAQ
+
+For a command-line walkthrough of the same scenarios, use [docs/demo-guide.md](docs/demo-guide.md).
+For requirement traceability, see [docs/demo-feature-matrix.md](docs/demo-feature-matrix.md).
+For an automated end-to-end demo verification, run `./scripts/smoke_demo.sh`.
+
+## Runtime Profiles
+
+### Demo profile
+
+- Launcher: `./scripts/run_demo.sh`
+- Compose: `docker compose -f docker-compose.demo.yml up --build`
+- Backend selection:
+  - `ACI_GRAPH_BACKEND=memory`
+  - `ACI_EVENT_BUS_BACKEND=memory`
+  - `ACI_INDEX_BACKEND=memory`
+  - `ACI_INTERCEPTOR_CIRCUIT_STATE_BACKEND=local`
+
+This is the recommended profile for investor and reviewer walkthroughs because it is deterministic,
+single-process, and pre-seeded.
+
+### Shared-backend profile
+
+- Compose: `docker compose up --build`
+- Backend selection:
+  - `ACI_GRAPH_BACKEND=neo4j`
+  - `ACI_EVENT_BUS_BACKEND=kafka`
+  - `ACI_INDEX_BACKEND=redis`
+  - `ACI_INTERCEPTOR_CIRCUIT_STATE_BACKEND=redis`
+
+This path exercises the durable/shared topology. It is the right local profile for validating
+backend wiring rather than for the shortest-path demo.
+
+### Demo-to-PRD coverage
+
+The frontend investor demo now includes the minimum scope from PRD Section 15:
+
+- `DEM-01` Overview dashboard (spend summary, coverage, savings).
+- `DEM-02` Six-layer attribution chain with method/confidence and request-level cost explanation.
+- `DEM-03` Model Intelligence view (spend, volume, cost/1K, latency, trend, optimization potential, variance).
+- `DEM-04` Teams view (spend, budget utilization, optimization potential, top models/apps, MoM trend).
+- `DEM-05` Interventions view with multiple intervention types and statuses.
+- `DEM-06` Governance view with mode selector and policy bundle.
+- `DEM-09` Persistent `SIMULATED DATA` watermark across views.
+
+## System Architecture
 
 ```mermaid
 flowchart LR
-  A["Phase 1: Ingestion"] --> B["Phase 2: Reconciliation (HRE)"]
-  B --> C["Phase 3: Attribution Graph"]
-  C --> D["Phase 4: Materialization"]
-  D --> E["Phase 5: Interception"]
-  E --> F["Phase 6: Reporting"]
+  A["Ingestion"] --> B["Reconciliation (HRE)"]
+  B --> C["Attribution Graph"]
+  C --> D["Materialization"]
+  D --> E["Interception"]
+  E --> F["Reporting"]
 
-  A1["OTel / Billing / CI-CD / Identity"] --> A
+  S["Billing / CI-CD / Identity / Runtime"] --> A
   A --> K[("Event Bus")]
   K --> B
-  B --> G[("Neo4j Graph Store")]
-  G --> D
-  D --> R[("Redis Attribution Index")]
+  B --> G[("Graph Store")]
+  D --> R[("Attribution Index")]
   R --> E
 ```
 
-Key design invariants:
+## Technical Guarantees
 
-- Decision-time path never blocks on graph traversal or external synchronous enrichment.
-- Interceptor path is O(1) index lookup with hard budget and fail-open fallback.
-- Event log is system-of-record; graph/index are derived, replayable state.
-- Raw telemetry remains inside customer trust boundary.
+- Interceptor never performs synchronous graph traversal or remote policy RPC on the hot path.
+- Fail-open behavior protects application availability under timeout/error conditions.
+- Schema validation occurs before events enter the append-only bus.
+- Policy and intervention decisions emit immutable audit events.
+- Shared-backend mode supports Kafka, Redis, and Neo4j adapters behind explicit config.
 
-## Runtime Roles and Deployment Topology
+## API Surface
 
-| Role | Primary responsibility | Typical backend settings |
-|---|---|---|
-| `all` | Local development / single-process operation | `ACI_EVENT_BUS_BACKEND=memory`, `ACI_INDEX_BACKEND=memory` |
-| `gateway` | Request interception and low-latency API surface | Memory bus; Redis index/circuit optional |
-| `processor` | Async ingestion, reconciliation, graph/index materialization | `ACI_EVENT_BUS_BACKEND=kafka`, `ACI_INDEX_BACKEND=redis` |
+### Public operational endpoints
 
-Production Kubernetes manifests model this split with separate deployments and egress controls in [`k8s/base/deployment.yaml`](k8s/base/deployment.yaml).
+- `GET /`
+- `GET /health`
+- `GET /live`
+- `GET /ready`
+- `GET /metrics`
+- `GET /metrics/prometheus`
 
-## API Contract (Current)
+### Authenticated API endpoints (`/v1/*`)
 
-Public operational endpoints:
+- `POST /v1/events/ingest`
+- `POST /v1/events/ingest/batch`
+- `POST /v1/intercept`
+- `POST /v1/trac`
+- `POST /v1/policy/evaluate`
+- `POST /v1/demo/bootstrap` (non-production only)
+- `GET /v1/attribution/{workload_id}`
+- `GET /v1/index/lookup?key=...`
+- `GET /v1/index/stats`
+- `GET /v1/dashboard/overview`
+- `GET /v1/pricing/catalog`
+- `POST /v1/pricing/estimate`
+- `POST /v1/finops/synthetic`
+- `POST /v1/finops/reconcile`
+- `GET /v1/finops/drift`
+- `POST /v1/forecast/spend`
+- `GET /v1/interventions`
+- `GET /v1/interventions/summary`
+- `POST /v1/interventions/{intervention_id}/status`
+- `POST /v1/interventions/cost-simulate`
+- `POST /v1/integrations/notify`
+- `GET /v1/integrations/deliveries`
 
-- `GET /` metadata
-- `GET /health` summarized health
-- `GET /live` liveness
-- `GET /ready` readiness (`503` when dependencies are unavailable)
-- `GET /metrics` Prometheus metrics
+## Security and Production Hardening
 
-Authenticated API endpoints (`/v1/*`):
+Implemented controls include:
 
-| Method | Path | Purpose |
-|---|---|---|
-| `POST` | `/v1/events/ingest` | Ingest one schema-validated domain event |
-| `POST` | `/v1/events/ingest/batch` | Ingest bounded batch of domain events |
-| `POST` | `/v1/intercept` | Decision-time enrichment / fail-open routing signal |
-| `POST` | `/v1/trac` | Compute TRAC for workload/request context |
-| `GET` | `/v1/attribution/{workload_id}` | Lookup precomputed attribution entry |
-| `GET` | `/v1/index/stats` | Index backend and cardinality stats |
-| `GET` | `/v1/dashboard/overview` | Dashboard aggregate data for frontend mockup |
+- JWT auth on `/v1/*` (issuer/audience/scope/tenant validation).
+- Startup-time guardrails preventing unsafe production config.
+- Ingestion rate limiting and batch-size bounds.
+- Durable-bus idempotency with tenant-scoped dedup keys.
+- Kubernetes baseline hardening (`runAsNonRoot`, dropped capabilities, read-only root filesystem, probes, PDBs, network policies).
+- Dependency and static-analysis gates in CI (ruff, strict mypy, pytest, CodeQL, dependency review).
 
-Auth behavior is configured in [`src/aci/config.py`](src/aci/config.py) and enforced via middleware in [`src/aci/api/auth.py`](src/aci/api/auth.py):
+See:
 
-- Development bypass allowed only if both `ACI_ENVIRONMENT` is non-production and `ACI_AUTH_ALLOW_DEV_BYPASS=true`.
-- Staging/production require bearer token validation (issuer, audience, expiry, scope, tenant claim).
+- [SECURITY.md](SECURITY.md)
+- [docs/architecture.md](docs/architecture.md)
 
-## Security and Governance Controls
+## Performance and Validation
 
-- JWT-based service authentication for protected API surface.
-- Tenant claim enforcement on authenticated API calls.
-- Input schema validation before events enter bus history.
-- Rate limiting and maximum ingest batch size controls.
-- Config validation blocks unsafe production settings (for example: weak auth secret defaults, missing Neo4j password, non-`rediss://` Redis URL when Redis is required).
-- Container hardening in deployment manifests: `runAsNonRoot`, `allowPrivilegeEscalation: false`, `capabilities.drop: [ALL]`, `readOnlyRootFilesystem: true`.
-- Namespace-level default deny policies plus explicit ingress/egress allowlists.
-- Secret hygiene via `pre-commit` + `gitleaks`.
-
-See [`SECURITY.md`](SECURITY.md) for reporting policy and coordinated disclosure process.
-
-## Reliability and Failure Semantics
-
-- Fail-open interceptor: request proceeds unmodified on timeout/error path.
-- Circuit breaker supports local or Redis-backed shared state.
-- Event bus DLQ semantics:
-  - Consumer failures in Kafka mode are published to `ACI_EVENT_BUS_DLQ_TOPIC` with error metadata.
-  - Failed events are committed only after DLQ publication to avoid poison-message hot loops.
-  - Replays should republish corrected payloads with new idempotency keys.
-- Idempotency dedup uses tenant-aware keys with bounded TTL retention.
-
-## Local Development
-
-### Option A: Python environment
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements-dev.lock
-python -m pip install --no-deps -e .
-```
+- Glass-jaw suite: `tests/glass_jaw/`
+- Unit/integration coverage across API, event bus, graph, policy, interception, and regression controls.
 
 Run quality gates locally:
 
 ```bash
-ruff check src/ tests/
+ruff check src tests
 mypy src tests --strict
-pytest tests/ -v
+pytest -q
 ```
 
-Run API locally:
-
-```bash
-uvicorn aci.api.app:app --reload --port 8000
-```
-
-### Option B: Docker Compose stack
-
-```bash
-cp .env.example .env
-docker compose up -d --build
-curl --fail http://localhost:8000/health
-```
-
-Compose file includes local Kafka/Redis/Neo4j dependencies for development at [`docker-compose.yml`](docker-compose.yml).
-
-## CI/CD and Reproducibility
-
-GitHub Actions workflows in [`.github/workflows`](.github/workflows):
-
-- `ci.yml`: lint, strict mypy, dependency checks, lockfile consistency, unit/integration/glass-jaw tests, docker smoke, SBOM artifact.
-- `codeql.yml`: static analysis.
-- `dependency-review.yml`: dependency risk gate on PRs.
-- `deploy-gate.yml`: preflight + deployability gate (`push` to `main` and manual dispatch).
-- `cache-hygiene.yml`: periodic cache maintenance.
-
-Dependency reproducibility is anchored by `requirements.lock` and `requirements-dev.lock`.
-
-## Phase 0 Glass-Jaw Validation
-
-These acceptance criteria gate the decision-time interceptor hypothesis:
-
-| Criterion | Target |
-|---|---|
-| P99 latency overhead | `<= 15ms` |
-| Request failures over sustained run | `0` |
-| Prompt classification accuracy | `>= 80%` |
-| Memory footprint | `<= 256MB` (phase validation target) |
-| Fail-open chaos tests | `0` client-visible errors |
-
-Run suite:
-
-```bash
-pytest tests/glass_jaw/ -v -m glass_jaw
-```
-
-Long-run load harness:
-
-```bash
-locust -f tests/glass_jaw/locustfile.py --host=http://localhost:8000 \
-  --users=500 --spawn-rate=50 --run-time=72h --headless
-```
-
-## Frontend Mockup
-
-- Current investor/demo UI: [`frontend/index.html`](frontend/index.html)
-- Prior iteration (retained for traceability): [`frontend/platform-mockup-v3.html`](frontend/platform-mockup-v3.html)
-
-When API is running, mockup is served at:
-
-```text
-http://localhost:8000/platform/
-```
-
-## Repository Map
+## Repository Layout
 
 ```text
 src/aci/
   api/            FastAPI service and auth middleware
-  core/           Event-bus abstractions + backends
-  hre/            Reconciliation methods + orchestrator
-  graph/          Graph-store abstraction
+  core/           Event bus, orchestration, schema validation
+  hre/            Heuristic reconciliation engine
+  graph/          Graph store abstraction
   index/          Materialization and serving index
-  interceptor/    Fail-open gateway + circuit breaker
-  trac/           TRAC calculations
-  carbon/         Carbon accounting models/calculations
+  interceptor/    Fail-open gateway and circuit breaker
   policy/         Governance policy engine
+  trac/           TRAC calculations
+  carbon/         Carbon models
+  equivalence/    Model equivalence verification
   benchmark/      Federated benchmarking protocol
-  models/         Event/graph/attribution domain models
+  models/         Domain models
 
-tests/
-  unit/           Unit and component tests
-  integration/    Multi-subsystem integration tests
-  glass_jaw/      Phase-0 acceptance and load validation
-
-k8s/base/         Reference Kubernetes deployment manifests
-docs/             Supplemental technical documentation
-wiki-src/         Source content for GitHub wiki
+frontend/         Investor-facing demo UI
+k8s/base/         Reference Kubernetes manifests
+infra/onboarding/ CloudFormation/Terraform onboarding templates
+docs/             Technical documentation
+tests/            Unit, integration, and glass-jaw validation suites
+wiki-src/         GitHub wiki source
 ```
 
-## Additional Technical Documentation
+## Wiki
 
-- Architecture deep dive: [`docs/architecture.md`](docs/architecture.md)
-- Security policy: [`SECURITY.md`](SECURITY.md)
-- Wiki source pages: [`wiki-src/`](wiki-src/)
+- [wiki-src/Home.md](wiki-src/Home.md)
+- [wiki-src/Technical-Architecture.md](wiki-src/Technical-Architecture.md)
+- [wiki-src/Security-and-Trust-Boundary.md](wiki-src/Security-and-Trust-Boundary.md)
+- [wiki-src/Operations-and-Deployment.md](wiki-src/Operations-and-Deployment.md)
+- [wiki-src/Technical-Due-Diligence-Guide.md](wiki-src/Technical-Due-Diligence-Guide.md)

@@ -445,7 +445,9 @@ class KafkaEventBus:
             except Exception as exc:
                 self._dispatch_errors += 1
                 logger.error("event_bus.kafka_handler_error", topic=topic, error=str(exc))
-                raise
+                # Keep consumer progress moving even when a downstream handler fails.
+                # The event remains committed and other handlers can still run.
+                return
 
     async def _publish_dlq(
         self,
