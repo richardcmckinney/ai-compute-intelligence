@@ -113,6 +113,17 @@ class _DummyProducer:
         self.messages.append((topic, value, key))
 
 
+class _FailingDummyProducer:
+    async def send_and_wait(
+        self,
+        topic: str,
+        value: bytes,
+        key: bytes | None = None,
+    ) -> None:
+        del topic, value, key
+        raise RuntimeError("dlq unavailable")
+
+
 @pytest.mark.asyncio
 async def test_kafka_commit_uses_offset_and_metadata_type() -> None:
     bus = KafkaEventBus(
@@ -164,3 +175,32 @@ async def test_kafka_handler_failures_go_to_dlq_and_still_commit() -> None:
     topic, value, _key = producer.messages[0]
     assert topic == "aci.events.dlq"
     assert b"boom" in value
+
+
+@pytest.mark.asyncio
+async def test_kafka_dlq_publish_failures_still_commit_offsets() -> None:
+    bus = KafkaEventBus(
+        bootstrap_servers="localhost:9092",
+        topic="aci.events",
+        dlq_topic="aci.events.dlq",
+        consumer_group="aci-tests",
+        idempotency_store=InMemoryIdempotencyStore(),
+    )
+    consumer = _DummyConsumer()
+    bus._consumer = consumer
+    bus._producer = _FailingDummyProducer()
+
+    def failing_handler(_event: DomainEvent) -> None:
+        raise RuntimeError("boom")
+
+    bus.subscribe(EventType.INFERENCE_REQUEST.value, failing_handler)
+
+    event = make_event("evt-dlq-fail", "key-dlq-fail")
+    topic_partition = TopicPartition("aci.events", 0)
+    payload = event.model_dump_json().encode("utf-8")
+
+    await bus._handle_message(topic_partition, offset=9, payload=payload)
+
+    assert len(consumer.commits) == 1
+    committed = consumer.commits[0][topic_partition]
+    assert committed.offset == 10

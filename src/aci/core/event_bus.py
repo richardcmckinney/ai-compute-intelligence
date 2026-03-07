@@ -268,12 +268,14 @@ class KafkaEventBus:
         dlq_topic: str,
         consumer_group: str,
         idempotency_store: AsyncIdempotencyStore,
+        consume: bool = True,
     ) -> None:
         self._bootstrap_servers = bootstrap_servers
         self._topic = topic
         self._dlq_topic = dlq_topic
         self._consumer_group = consumer_group
         self._idempotency_store = idempotency_store
+        self._consume_messages = consume
 
         self._handlers: dict[str, list[EventHandler]] = defaultdict(list)
         self._handler_lock = threading.Lock()
@@ -302,22 +304,24 @@ class KafkaEventBus:
         )
         await self._producer.start()
 
-        self._consumer = AIOKafkaConsumer(
-            self._topic,
-            bootstrap_servers=self._bootstrap_servers,
-            group_id=self._consumer_group,
-            enable_auto_commit=False,
-            auto_offset_reset="earliest",
-        )
-        await self._consumer.start()
+        if self._consume_messages:
+            self._consumer = AIOKafkaConsumer(
+                self._topic,
+                bootstrap_servers=self._bootstrap_servers,
+                group_id=self._consumer_group,
+                enable_auto_commit=False,
+                auto_offset_reset="earliest",
+            )
+            await self._consumer.start()
 
-        self._consumer_task = asyncio.create_task(self._consume_loop())
+            self._consumer_task = asyncio.create_task(self._consume_loop())
         self._started = True
         logger.info(
             "event_bus.kafka_started",
             topic=self._topic,
             dlq_topic=self._dlq_topic,
             consumer_group=self._consumer_group,
+            consume=self._consume_messages,
         )
 
     async def stop(self) -> None:
@@ -409,7 +413,18 @@ class KafkaEventBus:
             self._update_partition_lag(topic_partition, offset)
         except Exception as exc:
             self._dispatch_errors += 1
-            await self._publish_dlq(payload, str(exc), topic_partition, offset)
+            try:
+                await self._publish_dlq(payload, str(exc), topic_partition, offset)
+            except Exception as dlq_exc:
+                logger.error(
+                    "event_bus.dlq_publish_failed",
+                    original_error=str(exc),
+                    dlq_error=str(dlq_exc),
+                    topic=topic_partition.topic,
+                    partition=topic_partition.partition,
+                    offset=offset,
+                    payload=payload.decode("utf-8", errors="replace"),
+                )
             await self._commit_offset(topic_partition, offset)
 
     async def _commit_offset(self, topic_partition: TopicPartition, offset: int) -> None:
@@ -517,6 +532,7 @@ class KafkaEventBus:
             "consumer_group": self._consumer_group,
             "topic": self._topic,
             "dlq_topic": self._dlq_topic,
+            "consume_messages": self._consume_messages,
             "consumer_lag_by_partition": dict(self._consumer_lag_by_partition),
             "consumer_lag_total": sum(self._consumer_lag_by_partition.values()),
             "topics": topics,

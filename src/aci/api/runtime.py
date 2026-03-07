@@ -4,10 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import time
 from collections import deque
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, cast
+
+import structlog
+from redis.asyncio import Redis as AsyncRedis
+from redis.exceptions import RedisError
 
 from aci.confidence.calibration import CalibrationEngine
 from aci.config import PlatformConfig
@@ -38,6 +43,25 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from fastapi import FastAPI, Request
+
+logger = structlog.get_logger()
+
+
+class RateLimiter(Protocol):
+    async def allow(self, key: str) -> bool: ...
+
+    async def close(self) -> None: ...
+
+
+class SupportsRedisTokenBucket(Protocol):
+    async def eval(
+        self,
+        script: str,
+        numkeys: int,
+        *keys_and_args: str,
+    ) -> list[int | float | str] | tuple[int | float | str, ...]: ...
+
+    async def aclose(self) -> None: ...
 
 
 class SlidingWindowRateLimiter:
@@ -80,6 +104,85 @@ class SlidingWindowRateLimiter:
 
             bucket.append(now)
             return True
+
+    async def close(self) -> None:
+        return None
+
+
+class RedisTokenBucketRateLimiter:
+    """Redis-backed token bucket limiter with TTL-bounded keys."""
+
+    _TOKEN_BUCKET_LUA = """
+local capacity = tonumber(ARGV[1])
+local refill_rate = tonumber(ARGV[2])
+local now = tonumber(ARGV[3])
+local requested = tonumber(ARGV[4])
+local ttl = tonumber(ARGV[5])
+
+local bucket = redis.call('HMGET', KEYS[1], 'tokens', 'updated_at')
+local tokens = tonumber(bucket[1])
+local updated_at = tonumber(bucket[2])
+
+if tokens == nil then
+  tokens = capacity
+end
+if updated_at == nil then
+  updated_at = now
+end
+
+local elapsed = math.max(0, now - updated_at)
+tokens = math.min(capacity, tokens + (elapsed * refill_rate))
+
+local allowed = 0
+if tokens >= requested then
+  tokens = tokens - requested
+  allowed = 1
+end
+
+redis.call('HSET', KEYS[1], 'tokens', tokens, 'updated_at', now)
+redis.call('EXPIRE', KEYS[1], ttl)
+
+return {allowed, tokens}
+"""
+
+    def __init__(
+        self,
+        *,
+        redis_url: str,
+        limit: int,
+        window_seconds: float = 60.0,
+        key_prefix: str = "aci:ratelimit",
+        redis_client: SupportsRedisTokenBucket | None = None,
+    ) -> None:
+        self._redis: SupportsRedisTokenBucket = redis_client or cast(
+            "SupportsRedisTokenBucket",
+            AsyncRedis.from_url(redis_url, decode_responses=True),
+        )
+        self._capacity = float(limit)
+        self._refill_rate_per_second = float(limit) / window_seconds
+        self._ttl_seconds = max(1, int(window_seconds * 2))
+        self._key_prefix = key_prefix
+
+    async def allow(self, key: str) -> bool:
+        redis_key = f"{self._key_prefix}:{key}"
+        try:
+            allowed, _tokens = await self._redis.eval(
+                self._TOKEN_BUCKET_LUA,
+                1,
+                redis_key,
+                str(self._capacity),
+                str(self._refill_rate_per_second),
+                str(time.time()),
+                "1",
+                str(self._ttl_seconds),
+            )
+            return bool(int(allowed))
+        except RedisError as exc:
+            logger.warning("rate_limiter.redis_unavailable", error=str(exc))
+            return True
+
+    async def close(self) -> None:
+        await self._redis.aclose()
 
 
 class DisabledEventBus:
@@ -164,9 +267,7 @@ class AppState:
         self.accepts_interception = self.runtime_role in {"all", "gateway"}
         self.is_demo_environment = self.config.environment.lower() == "demo"
 
-        self.ingest_rate_limiter = SlidingWindowRateLimiter(
-            self.config.api_ingest_rate_limit_per_minute
-        )
+        self.ingest_rate_limiter = self._build_ingest_rate_limiter()
         self.ingest_max_batch_size = self.config.api_ingest_max_batch_size
         self._route_cardinality_limit = 50_000
         self._route_templates: set[str] = set()
@@ -197,7 +298,7 @@ class AppState:
         self.interceptor: FailOpenInterceptor | DisabledInterceptor
 
         if self.accepts_ingestion:
-            self.event_bus = self._build_event_bus()
+            self.event_bus = self._build_event_bus(consume=True)
             self.graph = build_graph_store(self.config)
             self.materializer = IndexMaterializer(self.index_store, self.config)
             self.hre = HeuristicReconciliationEngine()
@@ -211,7 +312,11 @@ class AppState:
                 policy_engine=self.policy_engine,
             )
         else:
-            self.event_bus = DisabledEventBus()
+            self.event_bus = (
+                self._build_event_bus(consume=False)
+                if self.accepts_interception
+                else DisabledEventBus()
+            )
             self.processor = DisabledProcessor()
 
         if self.accepts_interception:
@@ -225,7 +330,7 @@ class AppState:
                 self.index_store,
                 self.config.interceptor,
                 mode=DeploymentMode(self.config.interceptor_mode.lower()),
-                event_bus=self.event_bus if self.accepts_ingestion else None,
+                event_bus=None if isinstance(self.event_bus, DisabledEventBus) else self.event_bus,
                 circuit_state_store=circuit_state_store,
             )
         else:
@@ -233,7 +338,7 @@ class AppState:
                 mode=DeploymentMode(self.config.interceptor_mode.lower())
             )
 
-    def _build_event_bus(self) -> InMemoryEventBus | KafkaEventBus:
+    def _build_event_bus(self, *, consume: bool) -> InMemoryEventBus | KafkaEventBus:
         backend = self.config.event_bus_backend.lower()
         if backend == "kafka":
             idempotency_store: AsyncIdempotencyStore
@@ -250,9 +355,28 @@ class AppState:
                 dlq_topic=self.config.event_bus_dlq_topic,
                 consumer_group=self.config.event_bus_consumer_group,
                 idempotency_store=idempotency_store,
+                consume=consume,
             )
 
         return InMemoryEventBus()
+
+    def _build_ingest_rate_limiter(self) -> RateLimiter:
+        backend = self.config.api_ingest_rate_limit_backend.lower()
+        if backend == "auto":
+            backend = (
+                "redis"
+                if self.config.environment.lower() in {"production", "staging"}
+                else "memory"
+            )
+
+        if backend == "redis":
+            return RedisTokenBucketRateLimiter(
+                redis_url=self.config.redis_url,
+                limit=self.config.api_ingest_rate_limit_per_minute,
+                key_prefix=self.config.api_ingest_rate_limit_redis_prefix,
+            )
+
+        return SlidingWindowRateLimiter(self.config.api_ingest_rate_limit_per_minute)
 
     async def start(self) -> None:
         if self.graph is not None:
@@ -266,6 +390,7 @@ class AppState:
     async def stop(self) -> None:
         await self.interceptor.shutdown()
         await self.event_bus.stop()
+        await self.ingest_rate_limiter.close()
         if self.graph is not None:
             self.graph.close()
 
@@ -277,6 +402,8 @@ class AppState:
         if self.accepts_ingestion:
             checks["event_bus_started"] = bool(getattr(self.event_bus, "is_started", True))
             checks["graph_backend_healthy"] = self.graph.ready() if self.graph is not None else True
+        elif self.accepts_interception and self.config.interceptor.shadow_events_enabled:
+            checks["event_bus_started"] = bool(getattr(self.event_bus, "is_started", True))
 
         if self.config.index_backend.lower() == "redis":
             checks["index_durable_backend_healthy"] = self.index_store.durable_backend_healthy()

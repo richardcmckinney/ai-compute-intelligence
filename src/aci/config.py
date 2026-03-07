@@ -51,6 +51,10 @@ class InterceptorConfig(BaseSettings):
     # Shadow warming: probability of triggering background refresh on cache miss.
     # Prevents thundering herd (Section 6.3).
     shadow_warm_probability: float = Field(default=0.01, description="P(trigger refresh)")
+    shadow_warm_max_tracked_workloads: int = Field(
+        default=10_000,
+        description="Max cached workload refresh timestamps retained for shadow warming",
+    )
 
     # Emit shadow events to the event bus on miss/timeout.
     shadow_events_enabled: bool = Field(default=True)
@@ -92,6 +96,8 @@ class InterceptorConfig(BaseSettings):
                 "active_lite_gate_min_confidence must be greater than or equal to "
                 "active_lite_min_confidence"
             )
+        if self.shadow_warm_max_tracked_workloads <= 0:
+            raise ValueError("shadow_warm_max_tracked_workloads must be greater than 0")
         return self
 
 
@@ -269,9 +275,25 @@ class PlatformConfig(BaseSettings):
         default=600,
         description="Per-caller ingestion request budget per minute",
     )
+    api_ingest_rate_limit_backend: str = Field(
+        default="auto",
+        description="Rate-limit backend (auto|memory|redis)",
+    )
+    api_ingest_rate_limit_redis_prefix: str = Field(
+        default="aci:ratelimit",
+        description="Redis key prefix for distributed ingestion rate limiting",
+    )
     api_ingest_max_batch_size: int = Field(
         default=1000,
         description="Maximum accepted events per batch ingestion request",
+    )
+    api_max_request_bytes: int = Field(
+        default=1_048_576,
+        description="Maximum accepted HTTP request body size in bytes for ingestion routes",
+    )
+    api_trusted_proxy_cidrs: str = Field(
+        default="",
+        description="Comma-separated CIDRs/IPs allowed to supply trusted forwarding headers",
     )
     api_cors_allowed_origins: str = Field(
         default="",
@@ -365,8 +387,16 @@ class PlatformConfig(BaseSettings):
 
         if self.api_ingest_rate_limit_per_minute <= 0:
             raise ValueError("api_ingest_rate_limit_per_minute must be > 0")
+        valid_rate_limit_backends = {"auto", "memory", "redis"}
+        if self.api_ingest_rate_limit_backend not in valid_rate_limit_backends:
+            raise ValueError(
+                "api_ingest_rate_limit_backend must be one of "
+                f"{sorted(valid_rate_limit_backends)}"
+            )
         if self.api_ingest_max_batch_size <= 0:
             raise ValueError("api_ingest_max_batch_size must be > 0")
+        if self.api_max_request_bytes <= 0:
+            raise ValueError("api_max_request_bytes must be > 0")
 
         valid_circuit_backends = {"local", "redis"}
         if self.interceptor.circuit_state_backend not in valid_circuit_backends:
@@ -385,6 +415,17 @@ class PlatformConfig(BaseSettings):
         if self.auth.allow_dev_bypass and env_name not in non_production_envs:
             raise ValueError(
                 "auth.allow_dev_bypass may only be enabled in non-production environments"
+            )
+
+        cors_origins = [
+            origin.strip()
+            for origin in self.api_cors_allowed_origins.split(",")
+            if origin.strip()
+        ]
+        if self.api_cors_allow_credentials and "*" in cors_origins:
+            raise ValueError(
+                "api_cors_allow_credentials cannot be true when api_cors_allowed_origins "
+                "contains '*'"
             )
 
         algorithm = self.auth.jwt_algorithm.upper()
@@ -415,12 +456,39 @@ class PlatformConfig(BaseSettings):
             raise ValueError("kafka_bootstrap must be configured when event_bus_backend='kafka'")
 
         if (
+            production_like
+            and self.runtime_role in {"all", "gateway"}
+            and self.interceptor.shadow_events_enabled
+            and self.event_bus_backend != "kafka"
+        ):
+            raise ValueError(
+                "event_bus_backend must be 'kafka' when shadow_events_enabled is true "
+                "for gateway-capable production/staging runtimes"
+            )
+
+        if (
             self.index_backend == "redis"
             or self.interceptor.circuit_state_backend == "redis"
             or self.event_bus_backend == "kafka"
         ) and not self.redis_url:
             raise ValueError(
                 "redis_url must be configured for redis index/circuit state or kafka dedup backend"
+            )
+
+        resolved_rate_limit_backend = self.api_ingest_rate_limit_backend
+        if resolved_rate_limit_backend == "auto":
+            resolved_rate_limit_backend = "redis" if production_like else "memory"
+        if (
+            production_like
+            and self.runtime_role in {"all", "processor"}
+            and resolved_rate_limit_backend != "redis"
+        ):
+            raise ValueError(
+                "api_ingest_rate_limit_backend must resolve to 'redis' in production/staging"
+            )
+        if resolved_rate_limit_backend == "redis" and not self.redis_url:
+            raise ValueError(
+                "redis_url must be configured when api_ingest_rate_limit_backend='redis'"
             )
 
         if production_like and (

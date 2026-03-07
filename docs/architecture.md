@@ -15,7 +15,7 @@ Supports point-in-time traversal for historical attribution reconstruction.
 
 For local demos and tests, the same graph interface is backed by an explicit
 `InMemoryGraphStore`. The demo profile does not pretend to be the production topology;
-it uses the in-memory backend deliberately for deterministic reviewer walkthroughs.
+it uses the in-memory backend deliberately for deterministic local demonstrations.
 
 **Tier 2: Precomputed Attribution Index (Redis + Local Process Cache)**
 Flat, denormalized index entries optimized for O(1) hash lookups. Materialized
@@ -84,7 +84,7 @@ can be rebuilt deterministically from the event log. This enables:
 - Version replay when attribution logic is updated
 - Audit trail reconstruction for compliance
 
-Operational hardening:
+Operational safeguards:
 - Redis-backed idempotency keys (TTL) for dedup durability.
 - Dead-letter topic for poison events or handler failures.
 - Consumer lag metrics exported for replay and processing SLO monitoring.

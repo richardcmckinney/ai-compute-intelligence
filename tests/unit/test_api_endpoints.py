@@ -33,6 +33,8 @@ def isolated_app_state() -> Generator[None, None, None]:
     original_accepts_ingestion = app_state.accepts_ingestion
     original_accepts_interception = app_state.accepts_interception
     original_batch_limit = app_state.ingest_max_batch_size
+    original_max_request_bytes = app_state.config.api_max_request_bytes
+    original_trusted_proxy_cidrs = app_state.config.api_trusted_proxy_cidrs
     original_limiter = app_state.ingest_rate_limiter
     original_mode = app_state.interceptor.mode
 
@@ -60,6 +62,8 @@ def isolated_app_state() -> Generator[None, None, None]:
     app_state.accepts_ingestion = original_accepts_ingestion
     app_state.accepts_interception = original_accepts_interception
     app_state.ingest_max_batch_size = original_batch_limit
+    app_state.config.api_max_request_bytes = original_max_request_bytes
+    app_state.config.api_trusted_proxy_cidrs = original_trusted_proxy_cidrs
     app_state.ingest_rate_limiter = original_limiter
     app_state.interceptor.mode = original_mode
 
@@ -341,6 +345,53 @@ def test_event_ingest_rate_limit_is_enforced() -> None:
         assert first.status_code == 200
         assert second.status_code == 429
         assert "rate limit exceeded" in second.json()["detail"]
+
+
+def test_event_ingest_ignores_untrusted_forwarded_for_header() -> None:
+    app_state = get_state()
+    app_state.ingest_rate_limiter = SlidingWindowRateLimiter(limit=1, window_seconds=60.0)
+    app_state.config.api_trusted_proxy_cidrs = ""
+
+    payload = {
+        "event_type": "inference.request",
+        "subject_id": "req-forwarded-1",
+        "attributes": {"model": "gpt-4o-mini", "provider": "openai"},
+        "event_time": datetime.now(UTC).isoformat(),
+        "source": "unit-test",
+        "idempotency_key": "req-forwarded-1",
+    }
+
+    with TestClient(app) as client:
+        first = client.post(
+            "/v1/events/ingest",
+            json=payload,
+            headers={"X-Forwarded-For": "198.51.100.10"},
+        )
+        second = client.post(
+            "/v1/events/ingest",
+            json={**payload, "subject_id": "req-forwarded-2", "idempotency_key": "req-forwarded-2"},
+            headers={"X-Forwarded-For": "203.0.113.9"},
+        )
+
+        assert first.status_code == 200
+        assert second.status_code == 429
+
+
+def test_event_ingest_rejects_oversized_request_body_before_parsing() -> None:
+    app_state = get_state()
+    app_state.config.api_max_request_bytes = 64
+
+    oversized_body = "x" * 256
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/events/ingest",
+            content=oversized_body.encode(),
+            headers={"Content-Type": "application/json"},
+        )
+
+    assert response.status_code == 413
+    assert "request body exceeds configured max" in response.json()["detail"]
 
 
 def test_index_lookup_endpoint_contract() -> None:

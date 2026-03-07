@@ -135,9 +135,10 @@ class CalibrationEngine:
         labels = self.ground_truth[method]
         raw_scores = np.array([label.predicted_confidence for label in labels])
         outcomes = np.array([1.0 if label.was_correct else 0.0 for label in labels])
+        raw_scores, outcomes, weights = self._with_tail_anchors(raw_scores, outcomes)
 
         iso = IsotonicRegression(y_min=0.0, y_max=self.config.cap, out_of_bounds="clip")
-        iso.fit(raw_scores, outcomes)
+        iso.fit(raw_scores, outcomes, sample_weight=weights)
         self._iso_models[method] = iso
 
         # Generate curve points for storage and visualization.
@@ -185,6 +186,10 @@ class CalibrationEngine:
         labels = self.ground_truth[method]
         raw_scores = np.array([label.predicted_confidence for label in labels])
         outcomes = np.array([1.0 if label.was_correct else 0.0 for label in labels])
+        anchored_scores, anchored_outcomes, anchored_weights = self._with_tail_anchors(
+            raw_scores,
+            outcomes,
+        )
 
         # Bootstrap: resample 100 times, fit isotonic each time.
         n_bootstrap = 100
@@ -193,9 +198,13 @@ class CalibrationEngine:
 
         rng = np.random.default_rng(42)
         for b in range(n_bootstrap):
-            indices = rng.choice(len(labels), size=len(labels), replace=True)
+            indices = rng.choice(len(anchored_scores), size=len(anchored_scores), replace=True)
             iso = IsotonicRegression(y_min=0.0, y_max=self.config.cap, out_of_bounds="clip")
-            iso.fit(raw_scores[indices], outcomes[indices])
+            iso.fit(
+                anchored_scores[indices],
+                anchored_outcomes[indices],
+                sample_weight=anchored_weights[indices],
+            )
             bootstrap_curves[b] = iso.predict(test_points)
 
         median_curve = np.median(bootstrap_curves, axis=0)
@@ -219,16 +228,42 @@ class CalibrationEngine:
     ) -> float:
         """Linear interpolation between curve points."""
         if value <= raw_points[0]:
-            return cal_points[0]
+            upper = 0
+            while upper + 1 < len(raw_points) and raw_points[upper + 1] == raw_points[0]:
+                upper += 1
+            return max(cal_points[: upper + 1])
         if value >= raw_points[-1]:
-            return cal_points[-1]
+            lower = len(raw_points) - 1
+            while lower - 1 >= 0 and raw_points[lower - 1] == raw_points[-1]:
+                lower -= 1
+            return max(cal_points[lower:])
 
         for i in range(len(raw_points) - 1):
             if raw_points[i] <= value <= raw_points[i + 1]:
-                t = (value - raw_points[i]) / (raw_points[i + 1] - raw_points[i])
+                denominator = raw_points[i + 1] - raw_points[i]
+                if denominator <= 0:
+                    return max(cal_points[i], cal_points[i + 1])
+                t = (value - raw_points[i]) / denominator
                 return cal_points[i] + t * (cal_points[i + 1] - cal_points[i])
 
         return value  # Fallback: return raw.
+
+    @staticmethod
+    def _with_tail_anchors(
+        raw_scores: np.ndarray,
+        outcomes: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Inject low-weight tail anchors so isotonic fits preserve slope across [0, 1]."""
+        anchor_scores = np.array([0.0, 1.0])
+        anchor_outcomes = np.array([0.0, 1.0])
+        anchor_weights = np.array([0.05, 0.05])
+        sample_weights = np.ones_like(raw_scores)
+
+        return (
+            np.concatenate([raw_scores, anchor_scores]),
+            np.concatenate([outcomes, anchor_outcomes]),
+            np.concatenate([sample_weights, anchor_weights]),
+        )
 
     def get_confidence_tier(self, confidence: float) -> ConfidenceTier:
         """Classify a confidence score into operational tiers (Section 5.1)."""

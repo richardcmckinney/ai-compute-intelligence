@@ -15,6 +15,21 @@ Demonstrate that the platform can:
 - Python 3.12+
 - `pip`
 
+Change into the repository root first.
+
+If you cloned the repository:
+
+```bash
+git clone https://github.com/richardcmckinney/ai-compute-intelligence.git
+cd ai-compute-intelligence
+```
+
+If you downloaded the ZIP from GitHub:
+
+```bash
+cd /path/to/where/you/unzipped/ai-compute-intelligence
+```
+
 ## Run Local Demo
 
 ```bash
