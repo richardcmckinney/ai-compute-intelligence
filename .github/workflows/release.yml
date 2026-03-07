@@ -40,10 +40,14 @@ jobs:
       - name: Normalize release metadata
         id: meta
         shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_TARGET_REF: ${{ inputs.target_ref }}
+          INPUT_PRERELEASE: ${{ inputs.prerelease }}
         run: |
           set -euo pipefail
 
-          raw_version="${{ inputs.version }}"
+          raw_version="${INPUT_VERSION}"
           normalized="${raw_version#v}"
 
           if [[ ! "$normalized" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
@@ -57,8 +61,8 @@ jobs:
           {
             echo "tag_name=${tag_name}"
             echo "release_name=${release_name}"
-            echo "target_ref=${{ inputs.target_ref }}"
-            echo "prerelease=${{ inputs.prerelease }}"
+            echo "target_ref=${INPUT_TARGET_REF}"
+            echo "prerelease=${INPUT_PRERELEASE}"
           } >> "$GITHUB_OUTPUT"
 
   validate-and-build:
@@ -95,6 +99,11 @@ jobs:
 
       - name: Create release manifest and checksums
         shell: bash
+        env:
+          MANIFEST_TAG: ${{ needs.resolve-release.outputs.tag_name }}
+          MANIFEST_RELEASE_NAME: ${{ needs.resolve-release.outputs.release_name }}
+          MANIFEST_TARGET_REF: ${{ needs.resolve-release.outputs.target_ref }}
+          MANIFEST_PRERELEASE: ${{ needs.resolve-release.outputs.prerelease }}
         run: |
           set -euo pipefail
 
@@ -103,15 +112,19 @@ jobs:
           cp requirements.lock requirements-dev.lock release-assets/
           commit_sha="$(git rev-parse HEAD)"
 
-          cat > release-assets/release-manifest.json <<EOF
-          {
-            "release_tag": "${{ needs.resolve-release.outputs.tag_name }}",
-            "release_name": "${{ needs.resolve-release.outputs.release_name }}",
-            "target_ref": "${{ needs.resolve-release.outputs.target_ref }}",
-            "commit_sha": "${commit_sha}",
-            "prerelease": ${{ needs.resolve-release.outputs.prerelease }}
-          }
-          EOF
+          python3 -c "
+import json, os, sys
+data = {
+    'release_tag': os.environ['MANIFEST_TAG'],
+    'release_name': os.environ['MANIFEST_RELEASE_NAME'],
+    'target_ref': os.environ['MANIFEST_TARGET_REF'],
+    'commit_sha': sys.argv[1],
+    'prerelease': os.environ['MANIFEST_PRERELEASE'].lower() == 'true',
+}
+with open('release-assets/release-manifest.json', 'w') as f:
+    json.dump(data, f, indent=2)
+    f.write('\n')
+" "${commit_sha}"
 
           (
             cd release-assets
@@ -188,6 +201,7 @@ jobs:
 
           if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
             gh release upload "${TAG_NAME}" release-assets/* --clobber
+            gh release edit "${TAG_NAME}" "${prerelease_flag[@]}" "${latest_flag[@]}"
           else
             gh release create "${TAG_NAME}" \
               release-assets/* \
