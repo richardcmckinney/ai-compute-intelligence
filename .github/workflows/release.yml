@@ -99,6 +99,11 @@ jobs:
 
       - name: Create release manifest and checksums
         shell: bash
+        env:
+          MANIFEST_TAG: ${{ needs.resolve-release.outputs.tag_name }}
+          MANIFEST_RELEASE_NAME: ${{ needs.resolve-release.outputs.release_name }}
+          MANIFEST_TARGET_REF: ${{ needs.resolve-release.outputs.target_ref }}
+          MANIFEST_PRERELEASE: ${{ needs.resolve-release.outputs.prerelease }}
         run: |
           set -euo pipefail
 

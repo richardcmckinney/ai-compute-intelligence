@@ -183,6 +183,7 @@ See:
 
 - [SECURITY.md](SECURITY.md)
 - [docs/architecture.md](docs/architecture.md)
+- [docs/releasing.md](docs/releasing.md)
 
 ## Performance and Validation
 
